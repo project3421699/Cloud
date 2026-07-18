@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Chess — Play vs AI</title>
+
+<!-- chessboard.js (board UI) -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
+<!-- chess.js (rules / move generation) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.js"></script>
+<!-- Stockfish (Level 5 engine) is loaded as a Web Worker from CDN at runtime -->
+
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --panel-2: #273449;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --danger: #f87171;
+    --ok: #4ade80;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: radial-gradient(1200px 800px at 20% -10%, #1e3a8a33, transparent),
+                radial-gradient(1000px 700px at 100% 0%, #9333ea22, transparent),
+                var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 24px 16px 48px;
+  }
+  .app { max-width: 980px; margin: 0 auto; }
+  header { text-align: center; margin-bottom: 22px; }
+  header h1 { margin: 0 0 6px; font-size: clamp(22px, 4vw, 34px); letter-spacing: 0.5px; }
+  header p { margin: 0; color: var(--muted); font-size: 14px; }
+
+  .layout {
+    display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; align-items: flex-start;
+  }
+  .board-col { flex: 1 1 340px; max-width: 560px; }
+  .side-col { flex: 1 1 260px; max-width: 340px; min-width: 260px; display: flex; flex-direction: column; gap: 16px; }
+
+  #board { width: 100%; border-radius: var(--radius); overflow: hidden; box-shadow: 0 20px 45px rgba(0,0,0,0.45); }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid #334155;
+    border-radius: var(--radius);
+    padding: 16px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  }
+  .card label { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 8px; }
+
+  .row { display: flex; gap: 10px; align-items: center; }
+  select {
+    flex: 1; appearance: none; background: var(--panel-2); color: var(--text);
+    border: 1px solid #475569; border-radius: 10px; padding: 11px 12px; font-size: 15px; cursor: pointer;
+  }
+  select:focus { outline: 2px solid var(--accent); }
+  button {
+    background: linear-gradient(180deg, #38bdf8, #0ea5e9); color: #06283d; border: none;
+    border-radius: 10px; padding: 11px 16px; font-size: 15px; font-weight: 700; cursor: pointer;
+    transition: transform .06s ease, filter .15s ease; white-space: nowrap;
+  }
+  button:hover { filter: brightness(1.08); }
+  button:active { transform: translateY(1px); }
+
+  .level-name { margin-top: 10px; font-size: 13px; color: var(--accent); font-weight: 600; }
+
+  #status {
+    margin-top: 4px; padding: 12px 14px; border-radius: 10px; background: var(--panel-2);
+    font-size: 16px; font-weight: 600; min-height: 22px; text-align: center;
+  }
+  #status.check { color: var(--danger); background: #7f1d1d33; border: 1px solid #b91c1c66; }
+  #status.win   { color: var(--ok); background: #14532d33; border: 1px solid #16a34a66; }
+
+  .thinking { display: none; margin-top: 10px; text-align: center; color: var(--muted); font-size: 14px; }
+  .thinking.on { display: block; }
+  .thinking .dot {
+    display: inline-block; width: 8px; height: 8px; margin: 0 2px; border-radius: 50%;
+    background: var(--accent); animation: blink 1s infinite; vertical-align: middle;
+  }
+  .thinking .dot:nth-child(2) { animation-delay: .2s; }
+  .thinking .dot:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%,100% { opacity: .2; } 50% { opacity: 1; } }
+
+  .history-title { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 8px; }
+  #moveList { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow-y: auto; font-size: 14px; }
+  #moveList li { padding: 4px 8px; border-radius: 6px; font-variant-numeric: tabular-nums; }
+  #moveList li:nth-child(odd) { background: #ffffff08; }
+
+  .hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+
+  @media (max-width: 720px) {
+    .layout { flex-direction: column; align-items: center; }
+    .board-col, .side-col { max-width: 560px; width: 100%; }
+  }
+
+  /* ---------- Board highlight overlays ---------- */
+  #board .square-selected { background: rgba(56,189,248,0.55) !important; }
+  #board .square-lastmove { background: rgba(154,205,50,0.45) !important; }
+  #board .square-check    { background: rgba(239,68,68,0.65) !important; }
+
+  #board .square-valid, #board .square-capture { position: relative; }
+  #board .square-valid::after {
+    content: ""; position: absolute; top: 50%; left: 50%;
+    width: 30%; height: 30%; border-radius: 50%;
+    background: rgba(20,20,20,0.55); transform: translate(-50%,-50%);
+  }
+  #board .square-capture::after {
+    content: ""; position: absolute; top: 50%; left: 50%;
+    width: 86%; height: 86%; border-radius: 50%;
+    border: 6px solid rgba(20,20,20,0.45); transform: translate(-50%,-50%); box-sizing: border-box;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>♞ Chess vs AI</h1>
+    <p>You play <strong>White</strong>. Choose a difficulty and start playing.</p>
+  </header>
+
+  <div class="layout">
+    <div class="board-col">
+      <div id="board"></div>
+      <p class="hint">Tap or drag a piece to see legal moves. Pawn promotion promotes to Queen automatically.</p>
+    </div>
+
+    <div class="side-col">
+      <div class="card">
+        <label for="level">Difficulty</label>
+        <select id="level">
+          <option value="1">Level 1 — Novice (Random)</option>
+          <option value="2">Level 2 — Easy (Minimax)</option>
+          <option value="3" selected>Level 3 — Medium (Alpha-Beta)</option>
+          <option value="4">Level 4 — Hard (Deep Search)</option>
+          <option value="5">Level 5 — Grandmaster (Stockfish)</option>
+        </select>
+        <div class="level-name" id="levelName">Medium</div>
+        <div class="row" style="margin-top:14px;">
+          <button id="newGame">New Game</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div id="status">White to move</div>
+        <div class="thinking" id="thinking">
+          AI thinking<span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="history-title">Move History</div>
+        <ol id="moveList"></ol>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+   Chess application
+   - chess.js  : game rules / move generation
+   - chessboard.js : board UI + drag & drop
+   - 5 AI levels  : random / minimax / alpha-beta / deep / Stockfish
+   ========================================================================= */
+
+/* ---------- Globals ---------- */
+let game = new Chess();
+let board = null;
+let lastMove = null;
+let gameOver = false;
+let currentEvalMode = 'pst';
+
+/* ---------- DOM ---------- */
+const levelSelect = document.getElementById('level');
+const levelNameEl = document.getElementById('levelName');
+const statusEl    = document.getElementById('status');
+const thinkingEl  = document.getElementById('thinking');
+const moveListEl  = document.getElementById('moveList');
+const newGameBtn  = document.getElementById('newGame');
+
+/* ---------- Piece values & piece-square tables (white perspective, a8..h1) ---------- */
+const PIECE_VALUE = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
+const MATE = 1000000;
+
+const PST = {
+  p: [
+    [ 0,  0,  0,  0,  0,  0,  0,  0],
+    [50, 50, 50, 50, 50, 50, 50, 50],
+    [10, 10, 20, 30, 30, 20, 10, 10],
+    [ 5,  5, 10, 25, 25, 10,  5,  5],
+    [ 0,  0,  0, 20, 20,  0,  0,  0],
+    [ 5, -5,-10,  0,  0,-10, -5,  5],
+    [ 5, 10, 10,-20,-20, 10, 10,  5],
+    [ 0,  0,  0,  0,  0,  0,  0,  0]
+  ],
+  n: [
+    [-50,-40,-30,-30,-30,-30,-40,-50],
+    [-40,-20,  0,  0,  0,  0,-20,-40],
+    [-30,  0, 10, 15, 15, 10,  0,-30],
+    [-30,  5, 15, 20, 20, 15,  5,-30],
+    [-30,  0, 15, 20, 20, 15,  0,-30],
+    [-30,  5, 10, 15, 15, 10,  5,-30],
+    [-40,-20,  0,  5,  5,  0,-20,-40],
+    [-50,-40,-30,-30,-30,-30,-40,-50]
+  ],
+  b: [
+    [-20,-10,-10,-10,-10,-10,-10,-20],
+    [-10,  0,  0,  0,  0,  0,  0,-10],
+    [-10,  0,  5, 10, 10,  5,  0,-10],
+    [-10,  5,  5, 10, 10,  5,  5,-10],
+    [-10,  0, 10, 10, 10, 10,  0,-10],
+    [-10, 10, 10, 10, 10, 10, 10,-10],
+    [-10,  5,  0,  0,  0,  0,  5,-10],
+    [-20,-10,-10,-10,-10,-10,-10,-20]
+  ],
+  r: [
+    [ 0,  0,  0,  0,  0,  0,  0,  0],
+    [ 5, 10, 10, 10, 10, 10, 10,  5],
+    [-5,  0,  0,  0,  0,  0,  0, -5],
+    [-5,  0,  0,  0,  0,  0,  0, -5],
+    [-5,  0,  0,  0,  0,  0,  0, -5],
+    [-5,  0,  0,  0,  0,  0,  0, -5],
+    [-5,  0,  0,  0,  0,  0,  0, -5],
+    [ 0,  0,  0,  0,  0,  0,  0,  0]
+  ],
+  q: [
+    [-20,-10,-10, -5, -5,-10,-10,-20],
+    [-10,  0,  0,  0,  0,  0,  0,-10],
+    [-10,  0,  5,  5,  5,  5,  0,-10],
+    [ -5,  0,  5,  5,  5,  5,  0, -5],
+    [  0,  0,  5,  5,  5,  5,  0, -5],
+    [-10,  5,  5,  5,  5,  5,  0,-10],
+    [-10,  0,  5,  0,  0,  0,  0,-10],
+    [-20,-10,-10, -5, -5,-10,-10,-20]
+  ],
+  k: [
+    [-30,-40,-40,-50,-50,-40,-40,-30],
+    [-30,-40,-40,-50,-50,-40,-40,-30],
+    [-30,-40,-40,-50,-50,-40,-40,-30],
+    [-30,-40,-40,-50,-50,-40,-40,-30],
+    [-20,-30,-30,-40,-40,-30,-30,-20],
+    [-10,-20,-20,-20,-20,-20,-20,-10],
+    [ 20, 20,  0,  0,  0,  0, 20, 20],
+    [ 20, 30, 10,  0,  0, 10, 30, 20]
+  ]
+};
+
+/* ---------- Evaluation ---------- */
+function evaluate(g) {
+  const b = g.board();
+  let score = 0;
+  for (let r = 0; r < 8; r++) {
+    for (let f = 0; f < 8; f++) {
+      const p = b[r][f];
+      if (!p) continue;
+      const val = PIECE_VALUE[p.type];
+      let pstVal = 0;
+      if (currentEvalMode === 'pst') {
+        pstVal = (p.color === 'w') ? PST[p.type][r][f] : PST[p.type][7 - r][f];
+      }
+      score += (p.color === 'w' ? 1 : -1) * (val + pstVal);
+    }
+  }
+  return score; // + = good for White
+}
+
+/* ---------- Move ordering (captures first, by SEE-ish value) ---------- */
+function orderMoves(moves) {
+  moves.sort((a, b) => {
+    const va = a.captured ? PIECE_VALUE[a.captured] - PIECE_VALUE[a.piece.type] : -1000;
+    const vb = b.captured ? PIECE_VALUE[b.captured] - PIECE_VALUE[b.piece.type] : -1000;
+    return vb - va;
+  });
+}
+
+/* ---------- Negamax with alpha-beta (minimax, white-maximizing) ---------- */
+let deadline = 0;
+let searchAborted = false;
+function minimax(depth, g, alpha, beta, maximizing) {
+  if (searchAborted) return 0;
+  if (performance.now() > deadline) { searchAborted = true; return 0; }
+  if (g.in_checkmate()) return maximizing ? -(MATE + depth) : (MATE + depth);
+  if (g.in_stalemate() || g.in_draw()) return 0;
+  if (depth === 0) return evaluate(g);
+
+  const moves = g.moves({ verbose: true });
+  orderMoves(moves);
+
+  if (maximizing) {
+    let best = -Infinity;
+    for (const m of moves) {
+      g.move({ from: m.from, to: m.to, promotion: m.promotion });
+      const score = minimax(depth - 1, g, alpha, beta, false);
+      g.undo();
+      if (searchAborted) return 0; // board already restored; stop descending
+      if (score > best) best = score;
+      if (score > alpha) alpha = score;
+      if (beta <= alpha) break;
+    }
+    return best;
+  } else {
+    let best = Infinity;
+    for (const m of moves) {
+      g.move({ from: m.from, to: m.to, promotion: m.promotion });
+      const score = minimax(depth - 1, g, alpha, beta, true);
+      g.undo();
+      if (searchAborted) return 0; // board already restored; stop descending
+      if (score < best) best = score;
+      if (score < beta) beta = score;
+      if (beta <= alpha) break;
+    }
+    return best;
+  }
+}
+
+/* Iterative deepening with a time budget; returns a verbose move object.
+   Uses a flag-based abort (not exceptions) so the game state is always restored. */
+function computeBestMove(g, maxDepth, maxTimeMs) {
+  const rootMoves = g.moves({ verbose: true });
+  if (rootMoves.length === 0) return null;
+  orderMoves(rootMoves);
+
+  const start = performance.now();
+  let bestMove = rootMoves[0];
+
+  for (let d = 1; d <= maxDepth; d++) {
+    deadline = start + maxTimeMs;
+    searchAborted = false;
+    let alpha = -Infinity, beta = Infinity;
+    let currentBest = null, currentBestScore = -Infinity;
+    for (const m of rootMoves) {
+      g.move({ from: m.from, to: m.to, promotion: m.promotion });
+      const score = minimax(d - 1, g, alpha, beta, false);
+      g.undo();
+      if (searchAborted) break; // partial depth — keep previous full-depth best
+      if (score > currentBestScore) { currentBestScore = score; currentBest = m; }
+      alpha = Math.max(alpha, score);
+    }
+    if (searchAborted) break;
+    if (currentBest) bestMove = currentBest;
+    if (performance.now() - start > maxTimeMs) break;
+  }
+  return bestMove;
+}
+
+/* ---------- Stockfish (Level 5) — loaded as a cross-origin Web Worker ---------- */
+const STOCKFISH_URL = 'https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js';
+let sf = null;
+let sfReady = false;
+let sfResolver = null;
+let stockfishFailed = false;
+
+function initStockfish() {
+  if (sfReady) return Promise.resolve(sf);
+  if (stockfishFailed) return Promise.reject(new Error('Stockfish unavailable'));
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) { settled = true; stockfishFailed = true; reject(new Error('Stockfish timeout')); }
+    }, 12000);
+
+    try {
+      sf = new Worker(STOCKFISH_URL);
+    } catch (err) {
+      settled = true; clearTimeout(timer); stockfishFailed = true; reject(err); return;
+    }
+
+    const onMsg = (e) => {
+      const data = (typeof e === 'string') ? e : (e && e.data ? e.data : '');
+      if (data === 'uciok') {
+        if (!settled) { settled = true; clearTimeout(timer); sfReady = true; resolve(sf); }
+      } else if (typeof data === 'string' && data.indexOf('bestmove') === 0) {
+        const mv = data.split(' ')[1];
+        if (sfResolver) { const r = sfResolver; sfResolver = null; r(mv && mv !== '(none)' ? mv : null); }
+      }
+    };
+    sf.onmessage = onMsg;
+    sf.postMessage('uci');
+  });
+}
+
+function stockfishMove(fen) {
+  return initStockfish().then((engine) => new Promise((resolve) => {
+    sfResolver = resolve;
+    engine.postMessage('ucinewgame');
+    engine.postMessage('position fen ' + fen);
+    engine.postMessage('go movetime 1500');
+  }));
+}
+
+/* ---------- Square highlighting helpers ---------- */
+const PREVIEW = ['square-selected', 'square-valid', 'square-capture'];
+function squareEl(sq) {
+  let el = document.querySelector('#board [data-square="' + sq + '"]');
+  if (!el) el = document.querySelector('#board [id$="-' + sq + '"]');
+  return el;
+}
+function highlightSquare(sq, cls) {
+  const el = squareEl(sq);
+  if (el) el.classList.add(cls);
+}
+function clearPreviewHighlights() {
+  document.querySelectorAll('#board .square-55d63').forEach(el => el.classList.remove(...PREVIEW));
+}
+function clearAllHighlights() {
+  document.querySelectorAll('#board .square-55d63').forEach(el =>
+    el.classList.remove('square-selected', 'square-valid', 'square-capture', 'square-lastmove', 'square-check'));
+}
+function showValidMoves(square) {
+  clearPreviewHighlights();
+  if (lastMove) {
+    highlightSquare(lastMove.from, 'square-lastmove');
+    highlightSquare(lastMove.to, 'square-lastmove');
+  }
+  const moves = game.moves({ verbose: true }).filter(m => m.from === square);
+  highlightSquare(square, 'square-selected');
+  moves.forEach(m => {
+    if (game.get(m.to)) highlightSquare(m.to, 'square-capture');
+    else highlightSquare(m.to, 'square-valid');
+  });
+}
+function findKingSquare(color) {
+  const b = game.board();
+  for (let r = 0; r < 8; r++)
+    for (let f = 0; f < 8; f++) {
+      const p = b[r][f];
+      if (p && p.type === 'k' && p.color === color) return 'abcdefgh'[f] + (8 - r);
+    }
+  return null;
+}
+
+/* ---------- Status / history ---------- */
+const LEVEL_NAMES = {
+  1: 'Novice (Random)', 2: 'Easy', 3: 'Medium',
+  4: 'Hard', 5: 'Grandmaster (Stockfish)'
+};
+function updateStatus() {
+  statusEl.classList.remove('check', 'win');
+  let msg;
+  if (game.in_checkmate()) {
+    msg = (game.turn() === 'w') ? 'Black wins by checkmate' : 'White wins by checkmate';
+    statusEl.classList.add('win');
+  } else if (game.in_stalemate()) {
+    msg = 'Draw by stalemate';
+  } else if (game.in_draw()) {
+    msg = 'Draw (repetition / 50-move / material)';
+  } else {
+    const who = (game.turn() === 'w') ? 'Your move — White' : 'AI thinking — Black';
+    msg = who + (game.in_check() ? '  •  CHECK!' : '');
+    if (game.in_check()) statusEl.classList.add('check');
+  }
+  statusEl.textContent = msg;
+}
+function updateHistory() {
+  const hist = game.history();
+  moveListEl.innerHTML = '';
+  for (let i = 0; i < hist.length; i += 2) {
+    const li = document.createElement('li');
+    const num = (i / 2) + 1;
+    const white = hist[i] || '';
+    const black = hist[i + 1] || '';
+    li.textContent = num + '. ' + white + (black ? '   ' + black : '');
+    moveListEl.appendChild(li);
+  }
+  const wrap = moveListEl.parentElement;
+  wrap.scrollTop = wrap.scrollHeight;
+}
+function setThinking(on) {
+  thinkingEl.classList.toggle('on', !!on);
+}
+
+/* ---------- Move flow ---------- */
+function makeHumanMove(from, to) {
+  const piece = game.get(from);
+  const opts = { from, to };
+  if (piece && piece.type === 'p' && (to[1] === '8' || to[1] === '1')) opts.promotion = 'q';
+  return game.move(opts);
+}
+
+function afterMove() {
+  clearAllHighlights();
+  if (lastMove) {
+    highlightSquare(lastMove.from, 'square-lastmove');
+    highlightSquare(lastMove.to, 'square-lastmove');
+  }
+  if (game.in_check()) {
+    const ksq = findKingSquare(game.turn());
+    if (ksq) highlightSquare(ksq, 'square-check');
+  }
+  updateHistory();
+  updateStatus();
+
+  if (game.game_over()) { gameOver = true; setThinking(false); return; }
+  if (game.turn() === 'b') triggerAI();
+}
+
+async function triggerAI() {
+  if (gameOver || game.turn() !== 'b') return;
+  setThinking(true);
+  updateStatus();
+  await new Promise(r => setTimeout(r, 60)); // let the UI paint first
+
+  let move = null;
+  const lvl = parseInt(levelSelect.value, 10);
+  try {
+    if (lvl === 5) {
+      try {
+        const best = await stockfishMove(game.fen());
+        if (best) move = game.move({ from: best.substring(0, 2), to: best.substring(2, 4), promotion: best.length > 4 ? best[4] : undefined });
+      } catch (e) { /* fall through to built-in engine */ }
+      if (!move) {
+        const bm = computeBestMove(game, 4, 4000);
+        if (bm) move = game.move({ from: bm.from, to: bm.to, promotion: bm.promotion });
+      }
+    } else if (lvl === 1) {
+      const moves = game.moves({ verbose: true });
+      const m = moves[Math.floor(Math.random() * moves.length)];
+      move = game.move({ from: m.from, to: m.to, promotion: m.promotion });
+    } else {
+      const cfg = { 2: { d: 2, t: 400 }, 3: { d: 3, t: 1500 }, 4: { d: 4, t: 4000 } }[lvl];
+      currentEvalMode = (lvl === 2) ? 'material' : 'pst';
+      const bm = computeBestMove(game, cfg.d, cfg.t);
+      if (bm) move = game.move({ from: bm.from, to: bm.to, promotion: bm.promotion });
+    }
+  } catch (e) {
+    const bm = computeBestMove(game, 4, 4000);
+    if (bm) move = game.move({ from: bm.from, to: bm.to, promotion: bm.promotion });
+  }
+
+  setThinking(false);
+  if (move) {
+    lastMove = move;
+    board.position(game.fen());
+    afterMove();
+  } else {
+    afterMove();
+  }
+}
+
+/* ---------- Board setup ---------- */
+function onDragStart(source, piece) {
+  if (gameOver || game.turn() !== 'w' || piece.search(/^b/) !== -1) return false;
+  showValidMoves(source);
+}
+function onDrop(source, target) {
+  if (gameOver || game.turn() !== 'w') return 'snapback';
+  const mv = makeHumanMove(source, target);
+  if (!mv) return 'snapback';
+  lastMove = mv;
+  // returns undefined -> piece snaps to target; onSnapEnd syncs from FEN
+}
+function onSnapEnd() {
+  board.position(game.fen());
+  afterMove();
+}
+function onMouseoverSquare(square, piece) {
+  if (gameOver || game.turn() !== 'w') return;
+  if (piece && piece.search(/^w/) !== -1) showValidMoves(square);
+}
+function onMouseoutSquare() {
+  clearPreviewHighlights();
+}
+
+function newGame() {
+  game = new Chess();
+  lastMove = null;
+  gameOver = false;
+  clearAllHighlights();
+  setThinking(false);
+  board.position('start');
+  updateHistory();
+  updateStatus();
+}
+
+/* ---------- Init ---------- */
+function init() {
+  board = Chessboard('board', {
+    draggable: true,
+    position: 'start',
+    showNotation: true,
+    pieceTheme: 'https://lichess1.org/assets/piece/cburnett/{piece}.svg',
+    onDragStart, onDrop, onSnapEnd, onMouseoverSquare, onMouseoutSquare
+  });
+
+  levelNameEl.textContent = LEVEL_NAMES[levelSelect.value];
+  newGameBtn.addEventListener('click', newGame);
+  levelSelect.addEventListener('input', () => {
+    levelNameEl.textContent = LEVEL_NAMES[levelSelect.value];
+    updateStatus();
+  });
+
+  // keep board sized to its container
+  const doResize = () => { try { board.resize(); } catch (e) {} };
+  window.addEventListener('resize', doResize);
+  setTimeout(doResize, 60);
+  setTimeout(doResize, 400);
+
+  // initially we (White) move first, nothing to do
+  updateStatus();
+}
+
+if (typeof Chessboard === 'undefined' || typeof Chess === 'undefined') {
+  document.body.insertAdjacentHTML('afterbegin',
+    '<div style="background:#7f1d1d;color:#fff;padding:12px;text-align:center;">Failed to load chess libraries from CDN. Check your internet connection.</div>');
+} else {
+  init();
+}
+</script>
+</body>
+</html>
