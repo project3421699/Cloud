@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Solar System - Three.js</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Arial', sans-serif;
+            background: #000;
+            overflow: hidden;
+        }
+        #canvas {
+            display: block;
+            width: 100%;
+            height: 100vh;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #0f0;
+            font-size: 12px;
+            font-family: monospace;
+            max-width: 400px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #0f0;
+            line-height: 1.6;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <strong>🌍 3D Solar System</strong><br>
+        <br>
+        <strong>Controls:</strong><br>
+        • Left Click + Drag: Rotate<br>
+        • Right Click + Drag: Pan<br>
+        • Scroll: Zoom<br>
+        <br>
+        <strong>Celestial Bodies:</strong><br>
+        ☀️ Sun (Center)<br>
+        🟤 Mercury<br>
+        🟡 Venus<br>
+        🔵 Earth (+ Moon)<br>
+        🔴 Mars<br>
+        🟠 Jupiter<br>
+        💛 Saturn<br>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        // ============================================================================
+        // SCENE SETUP
+        // ============================================================================
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(
+            75,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            10000
+        );
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFShadowShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        camera.position.set(0, 50, 50);
+        camera.lookAt(0, 0, 0);
+
+        // ============================================================================
+        // LIGHTING
+        // ============================================================================
+        // PointLight at the Sun for realistic planet illumination
+        const sunLight = new THREE.PointLight(0xfdb813, 2, 500);
+        sunLight.position.set(0, 0, 0);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
+        sunLight.shadow.camera.far = 500;
+        scene.add(sunLight);
+
+        // Ambient light for subtle base visibility
+        const ambientLight = new THREE.AmbientLight(0x333333);
+        scene.add(ambientLight);
+
+        // ============================================================================
+        // BACKGROUND STARS (Particle System)
+        // ============================================================================
+        const starGeometry = new THREE.BufferGeometry();
+        const starCount = 1000;
+        const starPositions = new Float32Array(starCount * 3);
+
+        for (let i = 0; i < starCount * 3; i += 3) {
+            starPositions[i] = (Math.random() - 0.5) * 2000;
+            starPositions[i + 1] = (Math.random() - 0.5) * 2000;
+            starPositions[i + 2] = (Math.random() - 0.5) * 2000;
+        }
+
+        starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+        const starMaterial = new THREE.PointsMaterial({
+            color: 0xffffff,
+            size: 0.7,
+            sizeAttenuation: true
+        });
+        const stars = new THREE.Points(starGeometry, starMaterial);
+        scene.add(stars);
+
+        // ============================================================================
+        // PLANET DATA
+        // ============================================================================
+        const planetsData = [
+            { name: 'Mercury', size: 3.8, distance: 20, speed: 0.04, color: 0x8c7853, tilt: 0.03 },
+            { name: 'Venus', size: 9.5, distance: 32, speed: 0.015, color: 0xffc649, tilt: 3.11 },
+            { name: 'Earth', size: 10, distance: 48, speed: 0.01, color: 0x2233ff, tilt: 0.41, moon: true },
+            { name: 'Mars', size: 5.3, distance: 62, speed: 0.008, color: 0xff6633, tilt: 0.44 },
+            { name: 'Jupiter', size: 24, distance: 90, speed: 0.002, color: 0xc88b3a, tilt: 0.05 },
+            { name: 'Saturn', size: 20, distance: 120, speed: 0.0009, color: 0xfad5a5, tilt: 0.43 }
+        ];
+
+        const planets = [];
+        const planetMeshes = {};
+
+        // ============================================================================
+        // FUNCTION: CREATE PLANET WITH ORBITAL STRUCTURE
+        // ============================================================================
+        function createPlanet(data) {
+            // === Orbit Pivot Group (at scene center) ===
+            const orbitPivot = new THREE.Group();
+            orbitPivot.position.set(0, 0, 0);
+            scene.add(orbitPivot);
+
+            // === Planet Mesh (child of orbit pivot, positioned along X-axis) ===
+            const geometry = new THREE.IcosahedronGeometry(data.size, 32);
+            const material = new THREE.MeshPhongMaterial({
+                color: data.color,
+                shininess: 5
+            });
+            const planetMesh = new THREE.Mesh(geometry, material);
+            planetMesh.castShadow = true;
+            planetMesh.receiveShadow = true;
+            planetMesh.position.x = data.distance;
+            planetMesh.rotation.z = data.tilt;
+            orbitPivot.add(planetMesh);
+
+            // === Moon (if present) ===
+            if (data.moon) {
+                const moonGeometry = new THREE.IcosahedronGeometry(2.7, 16);
+                const moonMaterial = new THREE.MeshPhongMaterial({
+                    color: 0xcccccc,
+                    shininess: 3
+                });
+                const moonMesh = new THREE.Mesh(moonGeometry, moonMaterial);
+                moonMesh.castShadow = true;
+                moonMesh.receiveShadow = true;
+
+                // Moon Pivot Group (local to planet, for orbital motion around planet)
+                const moonOrbitPivot = new THREE.Group();
+                moonOrbitPivot.position.set(0, 0, 0);
+                planetMesh.add(moonOrbitPivot);
+
+                // Position moon on its local orbit
+                moonMesh.position.x = 18;
+                moonOrbitPivot.add(moonMesh);
+
+                // Store moon data for animation
+                planetMeshes[data.name].moon = {
+                    orbitPivot: moonOrbitPivot,
+                    mesh: moonMesh,
+                    speed: 0.015
+                };
+            }
+
+            planets.push({
+                orbitPivot,
+                mesh: planetMesh,
+                speed: data.speed,
+                name: data.name
+            });
+
+            planetMeshes[data.name] = {
+                mesh: planetMesh,
+                orbitPivot: orbitPivot
+            };
+        }
+
+        // ============================================================================
+        // CREATE ALL PLANETS
+        // ============================================================================
+        planetsData.forEach(data => createPlanet(data));
+
+        // ============================================================================
+        // CREATE SUN
+        // ============================================================================
+        const sunGeometry = new THREE.IcosahedronGeometry(15, 32);
+        const sunMaterial = new THREE.MeshBasicMaterial({
+            color: 0xfdb813,
+            emissive: 0xfdb813
+        });
+        const sunMesh = new THREE.Mesh(sunGeometry, sunMaterial);
+        sunMesh.position.set(0, 0, 0);
+        scene.add(sunMesh);
+
+        // ============================================================================
+        // ORBIT CONTROLS
+        // ============================================================================
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.enableZoom = true;
+        controls.autoRotate = false;
+
+        // ============================================================================
+        // WINDOW RESIZE HANDLER
+        // ============================================================================
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // ============================================================================
+        // ANIMATION LOOP
+        // ============================================================================
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Animate each planet
+            planets.forEach(planet => {
+                // === Orbital Motion: Rotate the Orbit Pivot Group ===
+                planet.orbitPivot.rotation.y += planet.speed;
+
+                // === Axial Rotation: Spin the Planet Mesh on its local Y-axis ===
+                planet.mesh.rotation.y += 0.005;
+
+                // === Moon Animation (if present) ===
+                if (planetMeshes[planet.name].moon) {
+                    const moon = planetMeshes[planet.name].moon;
+                    // Rotate the moon's orbit pivot locally (this orbits the moon around the planet)
+                    moon.orbitPivot.rotation.y += moon.speed;
+                    // Spin the moon on its own Y-axis
+                    moon.mesh.rotation.y += 0.01;
+                }
+            });
+
+            // Rotate sun for visual effect
+            sunMesh.rotation.y += 0.001;
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        animate();
+    </script>
+</body>
+</html>
