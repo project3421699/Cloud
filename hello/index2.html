@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Solar System — Three.js</title>
+  <style>
+    /* ------------------------------------------------------------------
+       Global page reset & layout
+    ------------------------------------------------------------------ */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      color: #fff;
+    }
+    #app { position: fixed; inset: 0; }
+    canvas { display: block; }
+
+    /* ------------------------------------------------------------------
+       Heads-up display (HUD)
+       Floating panels in screen corners provide meta-info & controls
+       while keeping the full-screen canvas underneath interactive.
+    ------------------------------------------------------------------ */
+    .hud {
+      position: fixed;
+      pointer-events: none;
+      user-select: none;
+      z-index: 10;
+    }
+    .hud.top-left   { top: 16px;    left: 16px;  }
+    .hud.top-right  { top: 16px;    right: 16px; text-align: right; }
+    .hud.bottom-left  { bottom: 16px; left: 16px;  }
+    .hud.bottom-right { bottom: 16px; right: 16px; pointer-events: auto; }
+
+    .title    { font-size: 18px; font-weight: 600; letter-spacing: 0.5px; }
+    .subtitle { font-size: 12px; opacity: 0.7; margin-top: 2px; }
+    .legend   { font-size: 11px; opacity: 0.7; line-height: 1.6; }
+
+    .panel {
+      background: rgba(10, 14, 25, 0.55);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 12px 16px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    }
+
+    .controls-row {
+      display: flex; align-items: center; gap: 12px;
+      font-size: 12px;
+    }
+    .controls-row + .controls-row { margin-top: 10px; }
+    .controls-row label { opacity: 0.85; min-width: 56px; }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 140px;
+      height: 4px;
+      background: rgba(255,255,255,0.18);
+      border-radius: 99px;
+      outline: none;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: #6cb8ff;
+      box-shadow: 0 0 10px rgba(108,184,255,0.85);
+      cursor: pointer;
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 14px; height: 14px; border: none;
+      border-radius: 50%;
+      background: #6cb8ff;
+      box-shadow: 0 0 10px rgba(108,184,255,0.85);
+      cursor: pointer;
+    }
+
+    .toggle {
+      pointer-events: auto;
+      cursor: pointer;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: #fff;
+      padding: 6px 12px;
+      font-size: 12px;
+      border-radius: 8px;
+      transition: background 0.18s, border-color 0.18s, transform 0.1s;
+    }
+    .toggle:hover  { background: rgba(255,255,255,0.14); }
+    .toggle:active { transform: scale(0.97); }
+    .toggle.active { background: rgba(108,184,255,0.22); border-color: rgba(108,184,255,0.5); color: #cfe7ff; }
+  </style>
+</head>
+<body>
+  <!-- Full-screen WebGL mount point -->
+  <div id="app"></div>
+
+  <!-- HUD: title & instructions -->
+  <div class="hud top-left panel">
+    <div class="title">☀️ Solar System</div>
+    <div class="subtitle">Three.js · WebGL · OrbitControls</div>
+  </div>
+
+  <div class="hud top-right panel">
+    <div class="legend">
+      🖱️ Left-drag — Orbit<br />
+      🖱️ Right-drag — Pan<br />
+      🖱️ Wheel — Zoom<br />
+      💡 Hover a planet for info
+    </div>
+  </div>
+
+  <!-- HUD: live readout for hovered planet -->
+  <div class="hud bottom-left panel">
+    <div class="legend" id="planetInfo">
+      Hover over a planet for details.
+    </div>
+  </div>
+
+  <!-- HUD: controls (speed + toggles) -->
+  <div class="hud bottom-right panel">
+    <div class="controls-row">
+      <label for="speed">Speed</label>
+      <input id="speed" type="range" min="0" max="5" step="0.05" value="1" />
+      <span id="speedValue" style="min-width:42px; text-align:right; opacity:0.85;">1.00×</span>
+    </div>
+    <div class="controls-row">
+      <label>Toggles</label>
+      <button id="toggleOrbits" class="toggle active">Orbits</button>
+      <button id="togglePause"  class="toggle">Pause</button>
+      <button id="toggleShadows" class="toggle active">Shadows</button>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       Three.js r128 + OrbitControls via CDN
+       (single global "THREE"; OrbitControls ships as THREE.OrbitControls)
+  ============================================================ -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <script>
+  /* ================================================================
+     3D SOLAR SYSTEM  —  Three.js (r128)
+     ----------------------------------------------------------------
+       Scene graph (strict hierarchy per spec):
+
+         scene
+           ├─ sunMesh              (0,0,0)  + child sunLight (PointLight)
+           ├─ starField            (THREE.Points background)
+           ├─ orbitGroup           (visual orbit rings)
+           └─ planetOrbitPivots[]  (each at 0,0,0)
+                 └─ planetMesh     (position.x = distance)  <-- axial tilt on .z
+                       ├─ ringMesh (optional, e.g. Saturn)
+                       └─ moonOrbitPivots[]   <-- children of planet mesh
+                             └─ moonMesh  (position.x = moonDistance)
+
+       Animations (requestAnimationFrame loop):
+         • planetOrbitPivots[i].rotation.y  → macro-orbit around Sun
+         • planetMesh.rotation.y            → local axial spin (independent)
+         • moonOrbitPivots[i].rotation.y    → moon orbit (auto-inherits
+                                              planet's macro-orbit matrix,
+                                              no manual vector math needed)
+     ================================================================ */
+
+  // ----------------------------------------------------------------
+  //  1. Renderer, scene, camera, controls
+  // ----------------------------------------------------------------
+  const container = document.getElementById('app');
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000005);
+
+  const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    powerPreference: 'high-performance'
+  });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputEncoding    = THREE.sRGBEncoding;            // r128 API
+  renderer.toneMapping       = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  container.appendChild(renderer.domElement);
+
+  const camera = new THREE.PerspectiveCamera(
+    60,
+    window.innerWidth / window.innerHeight,
+    0.1, 5000
+  );
+  camera.position.set(0, 90, 180);
+
+  // OrbitControls: drag-rotate (left), pan (right), wheel zoom
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.06;
+  controls.minDistance   = 12;
+  controls.maxDistance   = 2500;
+  controls.screenSpacePanning = true;
+
+  // ----------------------------------------------------------------
+  //  2. Lighting
+  //     - A PointLight lives INSIDE the Sun so planets are only
+  //       illuminated on their sun-facing hemisphere.
+  //     - A very mild AmbientLight keeps the dark side faintly
+  //       readable (subtle base visibility, not "daylight").
+  // ----------------------------------------------------------------
+  const sunLight = new THREE.PointLight(
+    0xfff2cc,   // warm sunlight
+    2.6,        // intensity
+    0,          // distance = 0  → physically-falloff (infinite range)
+    1.4         // decay exponent
+  );
+  sunLight.castShadow = true;
+  // PointLight shadow maps render a 6-face cubemap per frame; keep this
+  // modest so weak GPUs stay smooth. The Shadows toggle can fully disable it.
+  sunLight.shadow.mapSize.set(512, 512);
+  sunLight.shadow.bias = -0.0005;
+  sunLight.shadow.camera.near = 0.5;
+  sunLight.shadow.camera.far  = 400;
+
+  const ambient = new THREE.AmbientLight(0x223355, 0.06); // cool, very dim
+  scene.add(ambient);
+  // sunLight is attached to sunMesh below so it sits at the Sun's origin.
+
+  // ----------------------------------------------------------------
+  //  3. Procedural canvas textures (no external assets needed)
+  // ----------------------------------------------------------------
+  function makePlanetTexture(baseColor, accentColor, opts = {}) {
+    const {
+      bands     = 6,     // horizontal stripes (gas giant look)
+      speckles  = 4000,  // surface noise dots (rocky look)
+      seed      = Math.random()
+    } = opts;
+
+    const size = 512;
+    const c = document.createElement('canvas');
+    c.width = size; c.height = size;
+    const ctx = c.getContext('2d');
+
+    // Vertical base gradient
+    const grad = ctx.createLinearGradient(0, 0, 0, size);
+    const base   = new THREE.Color(baseColor);
+    const accent = new THREE.Color(accentColor);
+    for (let i = 0; i <= 10; i++) {
+      const t = i / 10;
+      grad.addColorStop(
+        t,
+        `rgb(${(base.clone().lerp(accent, t*0.45).r*255)|0},
+            ${(base.clone().lerp(accent, t*0.45).g*255)|0},
+            ${(base.clone().lerp(accent, t*0.45).b*255)|0})`
+      );
+    }
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+
+    // Deterministic-ish pseudo-random from seed for stability
+    let rngState = seed * 1e9 | 0;
+    const rand = () => {
+      rngState = (rngState * 1664525 + 1013904223) | 0;
+      return ((rngState >>> 0) / 0xffffffff);
+    };
+
+    // Horizontal bands
+    for (let i = 0; i < bands; i++) {
+      const y = (size / bands) * i + rand() * 8;
+      const h = size / bands * 0.6;
+      ctx.fillStyle = `rgba(255,255,255,${rand() * 0.10})`;
+      ctx.fillRect(0, y, size, h);
+      ctx.fillStyle = `rgba(0,0,0,${rand() * 0.10})`;
+      ctx.fillRect(0, y + h, size, h);
+    }
+
+    // Surface speckle noise (craters / clouds)
+    for (let i = 0; i < speckles; i++) {
+      const x = rand() * size, y = rand() * size;
+      const bright = rand() < 0.5 ? 255 : 0;
+      const a = rand() * 0.18;
+      ctx.fillStyle = `rgba(${bright},${bright},${bright},${a})`;
+      ctx.fillRect(x, y, 1.5, 1.5);
+    }
+
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.anisotropy = 8;
+    return tex;
+  }
+
+  // ----------------------------------------------------------------
+  //  4. The Sun (at absolute origin)
+  // ----------------------------------------------------------------
+  const SUN_RADIUS = 6;
+  const sunGeo = new THREE.SphereGeometry(SUN_RADIUS, 64, 64);
+  const sunMat = new THREE.MeshBasicMaterial({ color: 0xffd86b });
+  const sunMesh = new THREE.Mesh(sunGeo, sunMat);
+  sunMesh.position.set(0, 0, 0);   // <-- Sun sits at absolute center
+  scene.add(sunMesh);
+
+  // Attach the PointLight as a child of the Sun mesh so it travels with it.
+  sunMesh.add(sunLight);
+
+  // Soft additive "glow" inside the Sun for a faked bloom look.
+  const glowGeo = new THREE.SphereGeometry(SUN_RADIUS * 1.08, 32, 32);
+  const glowMat = new THREE.MeshBasicMaterial({
+    color: 0xffe2a0,
+    transparent: true,
+    opacity: 0.35,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  });
+  sunMesh.add(new THREE.Mesh(glowGeo, glowMat));
+
+  // Outer corona shell (BackSide additive halo)
+  const coronaGeo = new THREE.SphereGeometry(SUN_RADIUS * 1.25, 32, 32);
+  const coronaMat = new THREE.MeshBasicMaterial({
+    color: 0xffaa44,
+    transparent: true,
+    opacity: 0.18,
+    blending: THREE.AdditiveBlending,
+    side: THREE.BackSide,
+    depthWrite: false
+  });
+  sunMesh.add(new THREE.Mesh(coronaGeo, coronaMat));
+
+  // ----------------------------------------------------------------
+  //  5. Background star field  (THREE.Points)
+  // ----------------------------------------------------------------
+  function makeStarField(count = 7000, radius = 4000) {
+    const positions = new Float32Array(count * 3);
+    const colors    = new Float32Array(count * 3);
+    const tmp = new THREE.Color();
+
+    for (let i = 0; i < count; i++) {
+      // Uniform spherical distribution around the camera volume.
+      const u = Math.random(), v = Math.random();
+      const theta = 2 * Math.PI * u;
+      const phi   = Math.acos(2 * v - 1);
+      const r     = radius * (0.5 + Math.random() * 0.5);
+
+      positions[i*3]     = r * Math.sin(phi) * Math.cos(theta);
+      positions[i*3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      positions[i*3 + 2] = r * Math.cos(phi);
+
+      // Subtle white / blue / yellow tints
+      const t = Math.random();
+      if      (t < 0.70) tmp.setRGB(1.00, 1.00, 0.95);
+      else if (t < 0.90) tmp.setRGB(0.70, 0.85, 1.00);
+      else               tmp.setRGB(1.00, 0.85, 0.70);
+
+      colors[i*3]     = tmp.r;
+      colors[i*3 + 1] = tmp.g;
+      colors[i*3 + 2] = tmp.b;
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color',    new THREE.BufferAttribute(colors,    3));
+
+    const mat = new THREE.PointsMaterial({
+      size: 1.4,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.9,
+      sizeAttenuation: true,
+      depthWrite: false
+    });
+
+    return new THREE.Points(geo, mat);
+  }
+  const starField = makeStarField();
+  scene.add(starField);
+
+  // ----------------------------------------------------------------
+  //  6. Planet factory (enforces the strict hierarchy)
+  //
+  //   orbitPivot   (origin)        <-- rotated for orbital motion
+  //     └─ planetMesh (X = dist)   <-- rotated on local Y for axial spin
+  //           └─ (optional) ringMesh (Saturn)
+  //           └─ moonOrbitPivot[]  <-- child of planetMesh
+  //                  └─ moonMesh   (X = moonDistance)
+  // ----------------------------------------------------------------
+  function makePlanet(cfg) {
+    const {
+      name, size, distance,
+      color, accent,
+      axialTiltDeg = 0,
+      orbitSpeed   = 0.01,
+      spinSpeed    = 0.02,
+      moons        = []
+    } = cfg;
+
+    // ORBIT PIVOT — lives at (0,0,0), will rotate to orbit the sun.
+    const orbitPivot = new THREE.Group();
+    orbitPivot.name  = `${name}-orbitPivot`;
+
+    // PLANET MESH — child of pivot, offset outward along pivot's X.
+    const planetGeo = new THREE.SphereGeometry(size, 48, 48);
+    const planetMat = new THREE.MeshStandardMaterial({
+      map: makePlanetTexture(color, accent),
+      roughness: 0.85,
+      metalness: 0.05
+    });
+    const planetMesh = new THREE.Mesh(planetGeo, planetMat);
+    planetMesh.castShadow    = true;
+    planetMesh.receiveShadow = true;
+    planetMesh.position.x    = distance;                       // <-- outward X
+    planetMesh.rotation.z    = THREE.MathUtils.degToRad(axialTiltDeg); // axial tilt
+    planetMesh.name          = `${name}-mesh`;
+    orbitPivot.add(planetMesh);
+
+    // MOONS — child pivots attached directly to the planet mesh so
+    // they naturally inherit the planet's world transform.
+    const moonRecords = [];
+    for (const m of moons) {
+      const moonPivot = new THREE.Group();
+      moonPivot.name  = `${name}-${m.name}-pivot`;
+      planetMesh.add(moonPivot);                                // <-- attached to planet
+
+      const moonGeo = new THREE.SphereGeometry(m.size, 24, 24);
+      const moonMat = new THREE.MeshStandardMaterial({
+        map: makePlanetTexture(m.color, m.accent || m.color),
+        roughness: 1.0,
+        metalness: 0.0
+      });
+      const moonMesh = new THREE.Mesh(moonGeo, moonMat);
+      moonMesh.position.x = m.distance;
+      moonMesh.castShadow    = true;
+      moonMesh.receiveShadow = true;
+      moonPivot.add(moonMesh);
+
+      moonPivot.userData.orbitSpeed = m.orbitSpeed;
+      moonRecords.push({ name: m.name, pivot: moonPivot, mesh: moonMesh });
+    }
+
+    return {
+      name,
+      orbitPivot,
+      planetMesh,
+      moons: moonRecords,
+      orbitSpeed,
+      spinSpeed
+    };
+  }
+
+  // ----------------------------------------------------------------
+  //  7. Build the solar system
+  //     Sizes & distances are tuned for the scene (not real scale).
+  // ----------------------------------------------------------------
+  const planets = [
+    makePlanet({
+      name: 'Mercury', size: 0.7,  distance: 13,
+      color: 0xb1a18a, accent: 0x8a7a5e,
+      axialTiltDeg: 0.03, orbitSpeed: 0.041, spinSpeed: 0.005
+    }),
+    makePlanet({
+      name: 'Venus',   size: 1.4,  distance: 20,
+      color: 0xd9a26b, accent: 0xa26a3a,
+      axialTiltDeg: 177.4,  // retrograde
+      orbitSpeed: 0.032, spinSpeed: -0.002
+    }),
+    makePlanet({
+      name: 'Earth',   size: 1.5,  distance: 28,
+      color: 0x2a78d6, accent: 0x1a4a8a,
+      axialTiltDeg: 23.5,
+      orbitSpeed:  0.028, spinSpeed: 0.04,
+      moons: [{ name: 'Luna', size: 0.45, distance: 2.5,
+                color: 0xc7c7c7, accent: 0x8a8a8a, orbitSpeed: 0.12 }]
+    }),
+    makePlanet({
+      name: 'Mars',    size: 1.0,  distance: 36,
+      color: 0xc1532b, accent: 0x7a2a18,
+      axialTiltDeg: 25.2,
+      orbitSpeed:  0.024, spinSpeed: 0.038,
+      moons: [
+        { name: 'Phobos', size: 0.18, distance: 1.7,
+          color: 0x9a9a9a, orbitSpeed: 0.20 },
+        { name: 'Deimos', size: 0.14, distance: 2.5,
+          color: 0xa8a8a8, orbitSpeed: 0.13 }
+      ]
+    }),
+    makePlanet({
+      name: 'Jupiter', size: 4.2,  distance: 56,
+      color: 0xd1a36b, accent: 0x8a5a30,
+      axialTiltDeg: 3.1,
+      orbitSpeed:  0.013, spinSpeed: 0.08,
+      moons: [
+        { name: 'Io',       size: 0.50, distance: 5.8, color: 0xe6d36a, orbitSpeed: 0.15 },
+        { name: 'Europa',   size: 0.45, distance: 7.5, color: 0xd5c2a0, orbitSpeed: 0.12 },
+        { name: 'Ganymede', size: 0.70, distance: 9.5, color: 0xb8a98a, orbitSpeed: 0.10 },
+        { name: 'Callisto', size: 0.60, distance: 12.0, color: 0x8a7a62, orbitSpeed: 0.08 }
+      ]
+    }),
+    makePlanet({
+      name: 'Saturn',  size: 3.6,  distance: 76,
+      color: 0xe6c884, accent: 0xa68642,
+      axialTiltDeg: 26.7,
+      orbitSpeed:  0.0097, spinSpeed: 0.07,
+      moons: [{ name: 'Titan', size: 0.6, distance: 9.0,
+                color: 0xd6a96b, orbitSpeed: 0.09 }]
+    }),
+    makePlanet({
+      name: 'Uranus',  size: 2.6,  distance: 96,
+      color: 0x9ad8e0, accent: 0x4a8aa0,
+      axialTiltDeg: 97.8,
+      orbitSpeed:  0.0068, spinSpeed: 0.05
+    }),
+    makePlanet({
+      name: 'Neptune', size: 2.5,  distance: 114,
+      color: 0x3a78d6, accent: 0x1a4a8e,
+      axialTiltDeg: 28.3,
+      orbitSpeed:  0.0054, spinSpeed: 0.05,
+      moons: [{ name: 'Triton', size: 0.45, distance: 5.0,
+                color: 0xc7c7d6, orbitSpeed: 0.11 }]
+    })
+  ];
+
+  // Add each planet's orbit pivot to the scene.
+  for (const p of planets) scene.add(p.orbitPivot);
+
+  // ----------------------------------------------------------------
+  //  8. Saturn's rings (parented to Saturn mesh → inherits axial tilt)
+  // ----------------------------------------------------------------
+  (function addSaturnRings() {
+    const saturn = planets.find(p => p.name === 'Saturn');
+    if (!saturn) return;
+
+    const ringGeo = new THREE.RingGeometry(4.6, 7.4, 96, 4);
+    const ringMat = new THREE.MeshStandardMaterial({
+      color: 0xe8d4a4,
+      side: THREE.DoubleSide,
+      roughness: 0.9,
+      metalness: 0.05,
+      transparent: true,
+      opacity: 0.85
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = Math.PI / 2;       // lay flat in local XZ plane
+    ring.receiveShadow = true;
+    saturn.planetMesh.add(ring);
+  })();
+
+  // ----------------------------------------------------------------
+  //  9. Visual orbit guides (toggleable, NOT part of the orbital logic)
+  // ----------------------------------------------------------------
+  const orbitGroup = new THREE.Group();
+  orbitGroup.name = 'orbit-rings';
+  for (const p of planets) {
+    const r   = p.planetMesh.position.x;
+    const geo = new THREE.RingGeometry(r - 0.06, r + 0.06, 128, 1);
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x4a6090,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.30,
+      depthWrite: false
+    });
+    const m = new THREE.Mesh(geo, mat);
+    m.rotation.x = Math.PI / 2;          // draw around the X axis
+    orbitGroup.add(m);
+  }
+  scene.add(orbitGroup);
+
+  // ----------------------------------------------------------------
+  // 10. HUD wiring
+  // ----------------------------------------------------------------
+  const speedInput   = document.getElementById('speed');
+  const speedValue   = document.getElementById('speedValue');
+  const toggleOrbits = document.getElementById('toggleOrbits');
+  const togglePause  = document.getElementById('togglePause');
+  const toggleShadows= document.getElementById('toggleShadows');
+  const planetInfo   = document.getElementById('planetInfo');
+
+  let speedScale = parseFloat(speedInput.value);
+  let paused     = false;
+  let shadowsOn  = true;
+
+  speedInput.addEventListener('input', () => {
+    speedScale = parseFloat(speedInput.value);
+    speedValue.textContent = speedScale.toFixed(2) + '×';
+  });
+
+  toggleOrbits.addEventListener('click', () => {
+    orbitGroup.visible = !orbitGroup.visible;
+    toggleOrbits.classList.toggle('active', orbitGroup.visible);
+  });
+
+  togglePause.addEventListener('click', () => {
+    paused = !paused;
+    togglePause.classList.toggle('active', paused);
+    togglePause.textContent = paused ? 'Resume' : 'Pause';
+  });
+
+  toggleShadows.addEventListener('click', () => {
+    shadowsOn = !shadowsOn;
+    sunLight.castShadow = shadowsOn;
+    renderer.shadowMap.enabled = shadowsOn;
+    toggleShadows.classList.toggle('active', shadowsOn);
+    // Flip shadow flags on every caster/receiver in the scene.
+    for (const p of planets) {
+      p.planetMesh.castShadow    = shadowsOn;
+      p.planetMesh.receiveShadow = shadowsOn;
+      for (const m of p.moons) {
+        m.mesh.castShadow    = shadowsOn;
+        m.mesh.receiveShadow = shadowsOn;
+      }
+    }
+  });
+
+  // Raycaster for hover-based planet info
+  const raycaster = new THREE.Raycaster();
+  const pointer   = new THREE.Vector2();
+
+  function highlightPlanet(planet) {
+    if (!planet) {
+      planetInfo.textContent = 'Hover over a planet for details.';
+      return;
+    }
+    planetInfo.innerHTML =
+      `<strong style="font-size:13px;">${planet.name}</strong><br>` +
+      `Distance: ${planet.planetMesh.position.x} u · ` +
+      `Radius: ${planet.planetMesh.geometry.parameters.radius} u<br>` +
+      `Orbital ω: ${planet.orbitSpeed.toFixed(3)} · ` +
+      `Spin ω: ${planet.spinSpeed.toFixed(3)}<br>` +
+      `Moons: ${planet.moons.map(m => m.name).join(', ') || '—'}`;
+  }
+
+  window.addEventListener('pointermove', (e) => {
+    pointer.x =  (e.clientX / window.innerWidth)  * 2 - 1;
+    pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(pointer, camera);
+
+    // Cast against planet meshes (recursive to also pick up moons)
+    const targets = planets.map(p => p.planetMesh);
+    const hits = raycaster.intersectObjects(targets, true);
+    if (hits.length === 0) { highlightPlanet(null); return; }
+
+    // Walk up the parent chain until we find a planetMesh we know about
+    let obj = hits[0].object;
+    while (obj && !planets.find(p => p.planetMesh === obj)) obj = obj.parent;
+    const matched = planets.find(p => p.planetMesh === obj);
+    highlightPlanet(matched || null);
+  });
+
+  // ----------------------------------------------------------------
+  // 11. Window resize / full-screen canvas
+  // ----------------------------------------------------------------
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // ----------------------------------------------------------------
+  // 12. Animation loop
+  // ----------------------------------------------------------------
+  const clock = new THREE.Clock();
+
+  function tick() {
+    requestAnimationFrame(tick);
+
+    // Skip motion update while paused, but keep controls responsive.
+    if (!paused) {
+      const dt = Math.min(clock.getDelta(), 0.05);   // clamp huge gaps
+      const t  = clock.elapsedTime;
+
+      // Sun "breathing" — subtle volumetric pulse
+      const breath = 1 + Math.sin(t * 1.6) * 0.018;
+      sunMesh.scale.setScalar(breath);
+
+      // Macro-orbits — rotate each orbit pivot around Y.
+      for (const p of planets) {
+        // 1) Macro orbit around the Sun
+        p.orbitPivot.rotation.y += p.orbitSpeed * speedScale * dt;
+
+        // 2) Axial spin — INDEPENDENT of orbit (planet's LOCAL Y axis)
+        p.planetMesh.rotation.y += p.spinSpeed * speedScale * dt;
+
+        // 3) Moons — attach a child pivot to planetMesh already; rotating
+        //    it automatically follows the planet's macro-orbit because
+        //    it inherits the planet's world transform entirely.
+        for (const m of p.moons) {
+          m.pivot.rotation.y += m.pivot.userData.orbitSpeed * speedScale * dt;
+        }
+      }
+    }
+
+    controls.update();          // smooth orbit/pan/zoom damping
+    renderer.render(scene, camera);
+  }
+  tick();
+  </script>
+</body>
+</html>

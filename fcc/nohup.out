@@ -1,0 +1,100 @@
+python-dotenv could not parse statement starting at line 1
+python-dotenv could not parse statement starting at line 3
+Traceback (most recent call last):
+  File "/home/project3421699/.local/bin/fcc-server", line 10, in <module>
+    sys.exit(serve())
+             ~~~~~^^
+  File "/home/project3421699/.local/share/uv/tools/free-claude-code/lib/python3.14/site-packages/free_claude_code/cli/entrypoints.py", line 17, in serve
+    run_server()
+    ~~~~~~~~~~^^
+  File "/home/project3421699/.local/share/uv/tools/free-claude-code/lib/python3.14/site-packages/free_claude_code/cli/commands.py", line 40, in serve
+    settings = get_settings()
+  File "/home/project3421699/.local/share/uv/tools/free-claude-code/lib/python3.14/site-packages/free_claude_code/config/settings.py", line 438, in get_settings
+    return Settings()
+  File "/home/project3421699/.local/share/uv/tools/free-claude-code/lib/python3.14/site-packages/pydantic_settings/main.py", line 247, in __init__
+    super().__init__(**__pydantic_self__.__class__._settings_build_values(sources, init_kwargs))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/project3421699/.local/share/uv/tools/free-claude-code/lib/python3.14/site-packages/pydantic/main.py", line 263, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+pydantic_core._pydantic_core.ValidationError: 4 validation errors for Settings
+MODEL_FABLE
+  Value error, Model must be prefixed with provider type. Valid providers: nvidia_nim, open_router, gemini, deepseek, mistral, mistral_codestral, opencode, opencode_go, vercel, huggingface, cohere, github_models, wafer, kimi, minimax, cerebras, groq, sambanova, fireworks, cloudflare, zai, ollama_cloud, lmstudio, llamacpp, ollama. Format: provider_type/model/name [type=value_error, input_value='none', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+MODEL_OPUS
+  Value error, Model must be prefixed with provider type. Valid providers: nvidia_nim, open_router, gemini, deepseek, mistral, mistral_codestral, opencode, opencode_go, vercel, huggingface, cohere, github_models, wafer, kimi, minimax, cerebras, groq, sambanova, fireworks, cloudflare, zai, ollama_cloud, lmstudio, llamacpp, ollama. Format: provider_type/model/name [type=value_error, input_value='none', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+MODEL_SONNET
+  Value error, Model must be prefixed with provider type. Valid providers: nvidia_nim, open_router, gemini, deepseek, mistral, mistral_codestral, opencode, opencode_go, vercel, huggingface, cohere, github_models, wafer, kimi, minimax, cerebras, groq, sambanova, fireworks, cloudflare, zai, ollama_cloud, lmstudio, llamacpp, ollama. Format: provider_type/model/name [type=value_error, input_value='none', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+MODEL_HAIKU
+  Value error, Model must be prefixed with provider type. Valid providers: nvidia_nim, open_router, gemini, deepseek, mistral, mistral_codestral, opencode, opencode_go, vercel, huggingface, cohere, github_models, wafer, kimi, minimax, cerebras, groq, sambanova, fireworks, cloudflare, zai, ollama_cloud, lmstudio, llamacpp, ollama. Format: provider_type/model/name [type=value_error, input_value='none', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error
+INFO:     Started server process [6008]
+INFO:     Waiting for application startup.
+INFO:     Admin UI: http://127.0.0.1:8082/admin (local-only)
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8082 (Press CTRL+C to quit)
+INFO:     127.0.0.1:45914 - "GET /health HTTP/1.1" 200 OK
+http://127.0.0.1:8082/admin
+INFO:     127.0.0.1:52476 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35982 - "GET /health HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [6008]
+/home/project3421699/.local/share/uv/python/cpython-3.14.0-linux-x86_64-gnu/lib/python3.14/multiprocessing/resource_tracker.py:297: UserWarning: resource_tracker: There appear to be 8 leaked semaphore objects to clean up at shutdown: {'/mp-xc8ec6_m', '/mp-hkuivhbi', '/mp-vfyhoqg0', '/mp-7of5406c', '/mp-bl0b131p', '/mp-ldc0py7c', '/mp-fadec84z', '/mp-73m239lz'}
+  warnings.warn(
+INFO:     Started server process [6074]
+INFO:     Waiting for application startup.
+INFO:     Admin UI: http://127.0.0.1:8082/admin (local-only)
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8082 (Press CTRL+C to quit)
+INFO:     127.0.0.1:54240 - "GET /health HTTP/1.1" 200 OK
+http://127.0.0.1:8082/admin
+INFO:     127.0.0.1:55800 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55816 - "HEAD / HTTP/1.1" 204 No Content
+INFO:     127.0.0.1:46666 - "GET /v1/models?limit=1000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43808 - "POST /v1/messages?beta=true HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43824 - "POST /v1/messages?beta=true HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:43808 - "POST /v1/messages?beta=true HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [6074]
+/home/project3421699/.local/share/uv/python/cpython-3.14.0-linux-x86_64-gnu/lib/python3.14/multiprocessing/resource_tracker.py:297: UserWarning: resource_tracker: There appear to be 8 leaked semaphore objects to clean up at shutdown: {'/mp-qfavfrbu', '/mp-ikr_weq2', '/mp-c7ll6b5c', '/mp-uyuzh6tu', '/mp-stzvvl50', '/mp-bccuu95h', '/mp-mydgxejk', '/mp-0sb32y8x'}
+  warnings.warn(
+INFO:     Started server process [6147]
+INFO:     Waiting for application startup.
+INFO:     Admin UI: http://127.0.0.1:8082/admin (local-only)
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8082 (Press CTRL+C to quit)
+INFO:     127.0.0.1:38702 - "GET /health HTTP/1.1" 200 OK
+http://127.0.0.1:8082/admin
+INFO:     127.0.0.1:40352 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40360 - "HEAD / HTTP/1.1" 204 No Content
+INFO:     127.0.0.1:40370 - "GET /v1/models?limit=1000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54122 - "POST /v1/messages?beta=true HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54122 - "POST /v1/messages?beta=true HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54130 - "POST /v1/messages?beta=true HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54122 - "POST /v1/messages?beta=true HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41530 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52976 - "HEAD / HTTP/1.1" 204 No Content
+INFO:     127.0.0.1:52986 - "GET /v1/models?limit=1000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38828 - "POST /v1/messages?beta=true HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38828 - "POST /v1/messages?beta=true HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38842 - "POST /v1/messages?beta=true HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38828 - "POST /v1/messages?beta=true HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46814 - "POST /v1/messages?beta=true HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46814 - "POST /v1/messages?beta=true HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46816 - "POST /v1/messages?beta=true HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46814 - "POST /v1/messages?beta=true HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38262 - "POST /v1/messages?beta=true HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38262 - "POST /v1/messages?beta=true HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38274 - "POST /v1/messages?beta=true HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38262 - "POST /v1/messages?beta=true HTTP/1.1" 404 Not Found
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [6147]
+/home/project3421699/.local/share/uv/python/cpython-3.14.0-linux-x86_64-gnu/lib/python3.14/multiprocessing/resource_tracker.py:297: UserWarning: resource_tracker: There appear to be 8 leaked semaphore objects to clean up at shutdown: {'/mp-qhdo38np', '/mp-r2olk1oe', '/mp-46cypi5v', '/mp-t9vl3xfl', '/mp-qa55zaog', '/mp-marnwrk_', '/mp-00dx2agz', '/mp-nfv7oeef'}
+  warnings.warn(
