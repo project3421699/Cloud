@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ludo Master</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --red: #ef4444;
+            --red-light: #f87171;
+            --red-dark: #b91c1c;
+            --blue: #3b82f6;
+            --blue-light: #60a5fa;
+            --blue-dark: #1d4ed8;
+            --green: #22c55e;
+            --green-light: #4ade80;
+            --green-dark: #15803d;
+            --yellow: #eab308;
+            --yellow-light: #facc15;
+            --yellow-dark: #a16207;
+            --bg: #0f172a;
+            --surface: rgba(30, 41, 59, 0.85);
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: rgba(255, 255, 255, 0.1);
+            --shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            --cell-size: min(5.5vw, 32px);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 16px;
+            overflow-x: hidden;
+        }
+
+        .app-header {
+            text-align: center;
+            margin-bottom: 16px;
+        }
+
+        .app-header h1 {
+            font-size: clamp(1.8rem, 5vw, 2.5rem);
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--red-light), var(--blue-light), var(--green-light), var(--yellow-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.5px;
+        }
+
+        .app-header p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-top: 4px;
+        }
+
+        .game-container {
+            width: 100%;
+            max-width: 600px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .board-card {
+            background: var(--surface);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 12px;
+            box-shadow: var(--shadow);
+            position: relative;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(15, 1fr);
+            grid-template-rows: repeat(15, 1fr);
+            aspect-ratio: 1;
+            width: 100%;
+            max-width: 540px;
+            margin: 0 auto;
+            border-radius: 16px;
+            overflow: hidden;
+            background: rgba(15, 23, 42, 0.6);
+            box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .cell {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .cell.path {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        .cell.home-area {
+            border-radius: 12px;
+        }
+
+        .cell.home-area.red { background: rgba(239, 68, 68, 0.12); }
+        .cell.home-area.blue { background: rgba(59, 130, 246, 0.12); }
+        .cell.home-area.green { background: rgba(34, 197, 94, 0.12); }
+        .cell.home-area.yellow { background: rgba(234, 179, 8, 0.12); }
+
+        .cell.home-column-red { background: linear-gradient(180deg, rgba(239, 68, 68, 0.15), transparent); }
+        .cell.home-column-blue { background: linear-gradient(180deg, rgba(59, 130, 246, 0.15), transparent); }
+        .cell.home-column-green { background: linear-gradient(90deg, rgba(34, 197, 94, 0.15), transparent); }
+        .cell.home-column-yellow { background: linear-gradient(90deg, rgba(234, 179, 8, 0.15), transparent); }
+
+        .cell.center {
+            background: radial-gradient(circle, rgba(255,255,255,0.08), transparent 70%);
+        }
+
+        .cell.safe {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .cell.highlight {
+            animation: pulse 1s ease-in-out infinite;
+            box-shadow: inset 0 0 12px rgba(255, 255, 255, 0.3);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .piece {
+            width: 70%;
+            height: 70%;
+            border-radius: 50%;
+            position: absolute;
+            transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4), inset 0 -2px 4px rgba(0,0,0,0.2);
+            cursor: pointer;
+            z-index: 10;
+            border: 2px solid rgba(255, 255, 255, 0.4);
+        }
+
+        .piece.red { background: radial-gradient(circle at 30% 30%, var(--red-light), var(--red)); }
+        .piece.blue { background: radial-gradient(circle at 30% 30%, var(--blue-light), var(--blue)); }
+        .piece.green { background: radial-gradient(circle at 30% 30%, var(--green-light), var(--green)); }
+        .piece.yellow { background: radial-gradient(circle at 30% 30%, var(--yellow-light), var(--yellow)); }
+
+        .piece.selectable {
+            animation: bounce 0.8s ease-in-out infinite;
+            box-shadow: 0 0 15px currentColor;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+        }
+
+        .yard-spot {
+            width: 60%;
+            height: 60%;
+            border-radius: 50%;
+            border: 2px dashed rgba(255, 255, 255, 0.2);
+            position: absolute;
+        }
+
+        .yard-spot.red { background: rgba(239, 68, 68, 0.1); }
+        .yard-spot.blue { background: rgba(59, 130, 246, 0.1); }
+        .yard-spot.green { background: rgba(34, 197, 94, 0.1); }
+        .yard-spot.yellow { background: rgba(234, 179, 8, 0.1); }
+
+        .home-star {
+            font-size: clamp(0.6rem, 2vw, 0.9rem);
+            opacity: 0.4;
+            position: absolute;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 8px;
+        }
+
+        .dice-panel {
+            grid-column: 1 / -1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            padding: 16px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+        }
+
+        .dice {
+            width: 64px;
+            height: 64px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--text);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            transition: transform 0.2s ease;
+        }
+
+        .dice.rolling {
+            animation: diceRoll 0.5s ease-in-out;
+        }
+
+        @keyframes diceRoll {
+            0% { transform: rotate(0deg) scale(1); }
+            50% { transform: rotate(180deg) scale(1.1); }
+            100% { transform: rotate(360deg) scale(1); }
+        }
+
+        .status {
+            font-size: 0.95rem;
+            color: var(--text-muted);
+            text-align: center;
+            max-width: 200px;
+        }
+
+        .btn {
+            padding: 14px 20px;
+            border: none;
+            border-radius: 14px;
+            font-family: inherit;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--blue), #8b5cf6);
+            color: white;
+            box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.5);
+        }
+
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 14px 32px -5px rgba(59, 130, 246, 0.6); }
+        .btn-primary:active { transform: translateY(0); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover { background: rgba(255, 255, 255, 0.1); }
+
+        .turn-indicator {
+            grid-column: 1 / -1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 12px;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border);
+            font-weight: 600;
+        }
+
+        .turn-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            box-shadow: 0 0 10px currentColor;
+        }
+
+        .player-toggle {
+            grid-column: 1 / -1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        .toggle-btn {
+            padding: 8px 14px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-muted);
+            font-family: inherit;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .toggle-btn.active {
+            background: rgba(255, 255, 255, 0.15);
+            color: var(--text);
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .modal-overlay.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 32px;
+            text-align: center;
+            max-width: 320px;
+            width: 90%;
+            box-shadow: var(--shadow);
+        }
+
+        .modal h2 {
+            font-size: 1.5rem;
+            margin-bottom: 8px;
+        }
+
+        .modal p {
+            color: var(--text-muted);
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 480px) {
+            .board-card { padding: 8px; border-radius: 16px; }
+            .controls { gap: 8px; }
+            .btn { padding: 12px 16px; font-size: 0.85rem; }
+            .dice { width: 52px; height: 52px; font-size: 1.6rem; }
+        }
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <h1>🎲 Ludo Master</h1>
+        <p>Class-based · Mobile-first · Bot opponent</p>
+    </header>
+
+    <main class="game-container">
+        <section class="board-card">
+            <div class="board" id="board"></div>
+        </section>
+
+        <section class="controls">
+            <div class="dice-panel">
+                <div class="dice" id="dice">?</div>
+                <div class="status" id="status">Roll the dice to start</div>
+            </div>
+
+            <button class="btn btn-primary" id="rollBtn">🎲 Roll Dice</button>
+            <button class="btn btn-secondary" id="newGameBtn">↻ New Game</button>
+
+            <div class="turn-indicator" id="turnIndicator">
+                <span class="turn-dot" id="turnDot"></span>
+                <span id="turnText">Red's turn</span>
+            </div>
+
+            <div class="player-toggle">
+                <button class="toggle-btn active" data-player="0" id="toggleRed">Red: Human</button>
+                <button class="toggle-btn active" data-player="1" id="toggleBlue">Blue: Human</button>
+                <button class="toggle-btn active" data-player="2" id="toggleGreen">Green: Human</button>
+                <button class="toggle-btn active" data-player="3" id="toggleYellow">Yellow: Human</button>
+            </div>
+        </section>
+    </main>
+
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <h2 id="modalTitle">Game Over</h2>
+            <p id="modalMessage">Winner!</p>
+            <button class="btn btn-primary" id="modalBtn">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        // LUDO GAME - Class-based architecture
+        // ============================================================
+
+        const PLAYERS = ['red', 'blue', 'green', 'yellow'];
+        const PLAYER_COLORS = {
+            red: '#ef4444',
+            blue: '#3b82f6',
+            green: '#22c55e',
+            yellow: '#eab308'
+        };
+
+        // Board layout: 15x15 grid
+        // Clockwise 52-cell loop around the central cross
+        const PATH_CELLS = [
+            [6,0],[6,1],[6,2],[6,3],[6,4],[6,5], // Red arm moving inward
+            [5,6],[4,6],[3,6],[2,6],[1,6],[0,6], // Top arm moving outward
+            [0,7],                               // Top tip turning right
+            [0,8],[1,8],[2,8],[3,8],[4,8],[5,8], // Top arm moving inward
+            [6,9],[6,10],[6,11],[6,12],[6,13],[6,14], // Right arm moving outward
+            [7,14],                              // Right tip turning down
+            [8,14],[8,13],[8,12],[8,11],[8,10],[8,9], // Right arm moving inward
+            [9,8],[10,8],[11,8],[12,8],[13,8],[14,8], // Bottom arm moving outward
+            [14,7],                              // Bottom tip turning left
+            [14,6],[13,6],[12,6],[11,6],[10,6],[9,6], // Bottom arm moving inward
+            [8,5],[8,4],[8,3],[8,2],[8,1],[8,0], // Left arm moving outward
+            [7,0]                                // Left tip turning up
+        ];
+
+        // Home columns lead inward toward the center (7,7)
+        const HOME_COLUMNS = {
+            red:    [[7,1],[7,2],[7,3],[7,4],[7,5]],
+            blue:   [[1,7],[2,7],[3,7],[4,7],[5,7]],
+            yellow: [[7,13],[7,12],[7,11],[7,10],[7,9]],
+            green:  [[13,7],[12,7],[11,7],[10,7],[9,7]]
+        };
+
+        // Entry points on the path for each player (path index)
+        const ENTRY_POINTS = { red: 1, blue: 14, yellow: 27, green: 40 };
+
+        // Safe spots where pieces cannot be captured (entry points and inner corners)
+        const SAFE_SPOTS = new Set([1, 9, 14, 22, 27, 35, 40, 48]);
+
+        // Home areas (top-left corners)
+        const HOME_AREAS = {
+            red:    { rows: [0,5], cols: [0,5] },
+            blue:   { rows: [0,5], cols: [9,14] },
+            green:  { rows: [9,14], cols: [0,5] },
+            yellow: { rows: [9,14], cols: [9,14] }
+        };
+
+        // ============================================================
+        // PIECE CLASS
+        // ============================================================
+        class Piece {
+            constructor(id, player) {
+                this.id = id;
+                this.player = player;
+                this.position = 'yard'; // 'yard', path index, or 'home'
+                this.homeColumnIndex = -1; // -1 = not in home column
+                this.stepsTraveled = 0; // steps taken on main path
+            }
+
+            reset() {
+                this.position = 'yard';
+                this.homeColumnIndex = -1;
+                this.stepsTraveled = 0;
+            }
+
+            isInYard() { return this.position === 'yard'; }
+            isInHome() { return this.position === 'home'; }
+            isOnPath() { return typeof this.position === 'number'; }
+        }
+
+        // ============================================================
+        // PLAYER CLASS
+        // ============================================================
+        class Player {
+            constructor(index, name, isBot = false) {
+                this.index = index;
+                this.name = name;
+                this.color = PLAYERS[index];
+                this.isBot = isBot;
+                this.pieces = Array.from({ length: 4 }, (_, i) => new Piece(i, this));
+                this.finishedPieces = 0;
+            }
+
+            reset() {
+                this.pieces.forEach(p => p.reset());
+                this.finishedPieces = 0;
+            }
+
+            getPiecesInYard() {
+                return this.pieces.filter(p => p.isInYard());
+            }
+
+            getPiecesOnBoard() {
+                return this.pieces.filter(p => p.isOnPath() || p.homeColumnIndex >= 0);
+            }
+        }
+
+        // ============================================================
+        // BOARD CLASS - Renders the grid and pieces
+        // ============================================================
+        class Board {
+            constructor(containerId) {
+                this.container = document.getElementById(containerId);
+                this.cells = new Map(); // key: "r,c" -> cell element
+                this.pieceElements = new Map(); // key: pieceId -> element
+                this.renderGrid();
+            }
+
+            renderGrid() {
+                this.container.innerHTML = '';
+                this.cells.clear();
+
+                for (let r = 0; r < 15; r++) {
+                    for (let c = 0; c < 15; c++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'cell';
+                        cell.dataset.row = r;
+                        cell.dataset.col = c;
+                        this.container.appendChild(cell);
+                        this.cells.set(`${r},${c}`, cell);
+                    }
+                }
+
+                this.styleCells();
+            }
+
+            styleCells() {
+                // Home areas
+                for (const [color, area] of Object.entries(HOME_AREAS)) {
+                    for (let r = area.rows[0]; r <= area.rows[1]; r++) {
+                        for (let c = area.cols[0]; c <= area.cols[1]; c++) {
+                            const cell = this.cells.get(`${r},${c}`);
+                            cell.classList.add('home-area', color);
+                        }
+                    }
+                }
+
+                // Yard spots
+                const yardSpots = {
+                    red: [[1,1],[1,4],[4,1],[4,4]],
+                    blue: [[1,10],[1,13],[4,10],[4,13]],
+                    green: [[10,1],[10,4],[13,1],[13,4]],
+                    yellow: [[10,10],[10,13],[13,10],[13,13]]
+                };
+
+                for (const [color, spots] of Object.entries(yardSpots)) {
+                    spots.forEach(([r, c]) => {
+                        const cell = this.cells.get(`${r},${c}`);
+                        const spot = document.createElement('div');
+                        spot.className = `yard-spot ${color}`;
+                        cell.appendChild(spot);
+                    });
+                }
+
+                // Path cells
+                PATH_CELLS.forEach(([r, c], i) => {
+                    const cell = this.cells.get(`${r},${c}`);
+                    cell.classList.add('path');
+                    cell.dataset.pathIndex = i;
+                });
+
+                // Home columns
+                for (const [color, cells] of Object.entries(HOME_COLUMNS)) {
+                    cells.forEach(([r, c]) => {
+                        const cell = this.cells.get(`${r},${c}`);
+                        cell.classList.add(`home-column-${color}`);
+                    });
+                }
+
+                // Center
+                for (let r = 6; r <= 8; r++) {
+                    for (let c = 6; c <= 8; c++) {
+                        this.cells.get(`${r},${c}`).classList.add('center');
+                    }
+                }
+            }
+
+            placePiece(piece, r, c) {
+                let el = this.pieceElements.get(piece);
+                if (!el) {
+                    el = document.createElement('div');
+                    el.className = `piece ${piece.player.color}`;
+                    el.dataset.pieceId = piece.id;
+                    el.dataset.player = piece.player.index;
+                    this.pieceElements.set(piece, el);
+                }
+
+                const cell = this.cells.get(`${r},${c}`);
+                if (cell && !cell.contains(el)) {
+                    cell.appendChild(el);
+                }
+            }
+
+            updatePieceSpacing() {
+                this.cells.forEach(cell => {
+                    const piecesInCell = Array.from(cell.querySelectorAll('.piece'));
+                    piecesInCell.forEach((p, i) => {
+                        const offset = (i - (piecesInCell.length - 1) / 2) * 25;
+                        p.style.transform = `translate(${offset}%, ${offset}%)`;
+                    });
+                });
+            }
+
+            removePiece(piece) {
+                const el = this.pieceElements.get(piece);
+                if (el) el.remove();
+                this.pieceElements.delete(piece);
+            }
+
+            clearHighlights() {
+                this.cells.forEach(cell => cell.classList.remove('highlight'));
+                this.pieceElements.forEach(el => el.classList.remove('selectable'));
+            }
+
+            highlightCell(r, c) {
+                const cell = this.cells.get(`${r},${c}`);
+                if (cell) cell.classList.add('highlight');
+            }
+
+            getCellFromEvent(e) {
+                const cell = e.target.closest('.cell');
+                if (!cell) return null;
+                return {
+                    row: parseInt(cell.dataset.row),
+                    col: parseInt(cell.dataset.col)
+                };
+            }
+        }
+
+        // ============================================================
+        // AUTOPAYER CLASS - Phase 1: Random legal move
+        // Phase 2 TODO: Implement Heuristic Logic
+        // ============================================================
+        class AutoPlayer {
+            constructor(game) {
+                this.game = game;
+            }
+
+            // TODO: Implement Heuristic Logic
+            // Future evaluation functions:
+            // - captureOpponent(piece, move): reward moves that land on opponents
+            // - safeZonePriority(piece, move): reward reaching safe/home positions
+            // - homeRunFocus(piece, move): reward pieces close to finishing
+            // - blockOpponents(piece, move): reward blocking opponent paths
+            evaluateMove(piece, move) {
+                // Phase 1: uniform random weight
+                return Math.random();
+            }
+
+            selectMove(legalMoves) {
+                if (!legalMoves.length) return null;
+
+                // Phase 2 TODO: Replace with heuristic evaluation
+                // For now, select randomly among legal moves
+                const weights = legalMoves.map(m => this.evaluateMove(m.piece, m));
+                const total = weights.reduce((a, b) => a + b, 0);
+                let rand = Math.random() * total;
+
+                for (let i = 0; i < legalMoves.length; i++) {
+                    rand -= weights[i];
+                    if (rand <= 0) return legalMoves[i];
+                }
+
+                return legalMoves[legalMoves.length - 1];
+            }
+        }
+
+        // ============================================================
+        // GAMESTATE CLASS - Core state machine
+        // ============================================================
+        class GameState {
+            constructor() {
+                this.players = PLAYERS.map((name, i) => new Player(i, name, false));
+                this.currentPlayerIndex = 0;
+                this.diceValue = 0;
+                this.diceRolled = false;
+                this.consecutiveSixes = 0;
+                this.gameOver = false;
+                this.isProcessing = false;
+                this.gameTimeout = null;
+                this.diceInterval = null;
+                this.board = new Board('board');
+                this.autoPlayer = new AutoPlayer(this);
+                this.selectedPiece = null;
+
+                this.bindEvents();
+                this.render();
+            }
+
+            bindEvents() {
+                document.getElementById('rollBtn').addEventListener('click', () => this.rollDice());
+                document.getElementById('newGameBtn').addEventListener('click', () => this.resetGame());
+                document.getElementById('modalBtn').addEventListener('click', () => this.resetGame());
+
+                document.querySelectorAll('.toggle-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const idx = parseInt(e.target.dataset.player);
+                        this.players[idx].isBot = !this.players[idx].isBot;
+                        e.target.textContent = `${PLAYERS[idx][0].toUpperCase() + PLAYERS[idx].slice(1)}: ${this.players[idx].isBot ? 'Bot' : 'Human'}`;
+                        e.target.classList.toggle('active', !this.players[idx].isBot);
+                        this.checkBotTurn();
+                    });
+                });
+
+                this.board.container.addEventListener('click', (e) => this.handleBoardClick(e));
+            }
+
+            get currentPlayer() {
+                return this.players[this.currentPlayerIndex];
+            }
+
+            resetGame() {
+                clearTimeout(this.gameTimeout);
+                clearInterval(this.diceInterval);
+                document.getElementById('dice').classList.remove('rolling');
+                this.board.container.querySelectorAll('.piece').forEach(el => el.remove());
+                this.board.pieceElements.clear();
+                this.players.forEach(p => p.reset());
+                this.currentPlayerIndex = 0;
+                this.diceValue = 0;
+                this.diceRolled = false;
+                this.consecutiveSixes = 0;
+                this.gameOver = false;
+                this.isProcessing = false;
+                this.selectedPiece = null;
+                document.getElementById('modalOverlay').classList.remove('show');
+                this.render();
+            }
+
+            rollDice() {
+                if (this.gameOver || this.diceRolled || this.isProcessing) return;
+                this.isProcessing = true;
+
+                const diceEl = document.getElementById('dice');
+                diceEl.classList.add('rolling');
+
+                // Animate dice roll
+                let rolls = 0;
+                this.diceInterval = setInterval(() => {
+                    diceEl.textContent = Math.floor(Math.random() * 6) + 1;
+                    rolls++;
+                    if (rolls >= 10) {
+                        clearInterval(this.diceInterval);
+                        this.diceValue = Math.floor(Math.random() * 6) + 1;
+                        diceEl.textContent = this.diceValue;
+                        diceEl.classList.remove('rolling');
+                        this.diceRolled = true;
+                        this.isProcessing = false;
+                        this.handleDiceResult();
+                    }
+                }, 60);
+            }
+
+            handleDiceResult() {
+                if (this.diceValue === 6) {
+                    this.consecutiveSixes++;
+                    if (this.consecutiveSixes >= 3) {
+                        this.updateStatus('Three sixes! Turn skipped.');
+                        this.consecutiveSixes = 0;
+                        this.isProcessing = false;
+                        this.nextTurn();
+                        return;
+                    }
+                } else {
+                    this.consecutiveSixes = 0;
+                }
+
+                const legalMoves = this.getLegalMoves();
+                if (legalMoves.length === 0) {
+                    this.updateStatus('No legal moves. Next player.');
+                    this.isProcessing = false;
+                    this.gameTimeout = setTimeout(() => this.nextTurn(), 1200);
+                    return;
+                }
+
+                this.updateStatus('Select a piece to move');
+                this.highlightLegalMoves(legalMoves);
+
+                if (this.currentPlayer.isBot) {
+                    this.gameTimeout = setTimeout(() => this.playBotMove(legalMoves), 800);
+                }
+            }
+
+            getLegalMoves() {
+                const player = this.currentPlayer;
+                const moves = [];
+
+                player.pieces.forEach(piece => {
+                    const move = this.calculateMove(piece, this.diceValue);
+                    if (move) {
+                        moves.push({ piece, ...move });
+                    }
+                });
+
+                return moves;
+            }
+
+            calculateMove(piece, steps) {
+                const player = this.currentPlayer;
+
+                if (piece.isInHome()) return null;
+
+                if (piece.isInYard()) {
+                    if (steps === 6) {
+                        const entryIdx = ENTRY_POINTS[player.color];
+                        return { type: 'enter', toIndex: entryIdx };
+                    }
+                    return null;
+                }
+
+                if (piece.isOnPath()) {
+                    const homeColumn = HOME_COLUMNS[player.color];
+                    const totalSteps = piece.stepsTraveled + steps;
+
+                    // Need 51 steps on main path to enter the first home column cell
+                    if (totalSteps >= 51) {
+                        const homeIdx = totalSteps - 51;
+                        if (homeIdx >= 0 && homeIdx < homeColumn.length) {
+                            return { type: 'home', homeIndex: homeIdx };
+                        }
+                        return null;
+                    }
+
+                    const pathLen = PATH_CELLS.length;
+                    const newIndex = (piece.position + steps) % pathLen;
+                    return { type: 'move', toIndex: newIndex };
+                }
+
+                if (piece.homeColumnIndex >= 0) {
+                    const homeColumn = HOME_COLUMNS[player.color];
+                    const newHomeIdx = piece.homeColumnIndex + steps;
+                    if (newHomeIdx < homeColumn.length) {
+                        return { type: 'home', homeIndex: newHomeIdx };
+                    }
+                    return null;
+                }
+
+                return null;
+            }
+
+            highlightLegalMoves(moves) {
+                this.board.clearHighlights();
+                moves.forEach(move => {
+                    let r, c;
+                    if (move.type === 'enter' || move.type === 'move') {
+                        [r, c] = PATH_CELLS[move.toIndex];
+                    } else if (move.type === 'home') {
+                        [r, c] = HOME_COLUMNS[this.currentPlayer.color][move.homeIndex];
+                    }
+                    this.board.highlightCell(r, c);
+
+                    const pieceEl = this.board.pieceElements.get(move.piece);
+                    if (pieceEl) pieceEl.classList.add('selectable');
+                });
+            }
+
+            handleBoardClick(e) {
+                if (this.gameOver || !this.diceRolled || this.currentPlayer.isBot || this.isProcessing) return;
+
+                const cell = e.target.closest('.cell');
+                if (!cell) return;
+
+                const pieceEl = e.target.closest('.piece');
+                if (!pieceEl) return;
+
+                const pieceId = parseInt(pieceEl.dataset.pieceId);
+                const piece = this.currentPlayer.pieces.find(p => p.id === pieceId);
+                if (!piece) return;
+
+                const legalMoves = this.getLegalMoves();
+                const move = legalMoves.find(m => m.piece === piece);
+                if (move) {
+                    this.executeMove(move);
+                }
+            }
+
+            playBotMove(legalMoves) {
+                const move = this.autoPlayer.selectMove(legalMoves);
+                if (move) {
+                    this.executeMove(move);
+                }
+            }
+
+            executeMove(move) {
+                const player = this.currentPlayer;
+                const piece = move.piece;
+                let extraTurn = false;
+
+                if (move.type === 'enter') {
+                    piece.position = move.toIndex;
+                    piece.stepsTraveled = 0;
+                    extraTurn = this.captureOpponentIfAny(piece);
+                } else if (move.type === 'move') {
+                    piece.position = move.toIndex;
+                    piece.stepsTraveled += this.diceValue;
+                    extraTurn = this.captureOpponentIfAny(piece);
+                } else if (move.type === 'home') {
+                    piece.homeColumnIndex = move.homeIndex;
+                    piece.position = 'home-column';
+                    if (move.homeIndex === HOME_COLUMNS[player.color].length - 1) {
+                        piece.position = 'home';
+                        player.finishedPieces++;
+                        extraTurn = true;
+                        this.checkWin();
+                    }
+                }
+
+                this.board.clearHighlights();
+                this.diceRolled = false;
+                this.selectedPiece = null;
+
+                if (!this.gameOver) {
+                    if (this.diceValue === 6 || extraTurn) {
+                        this.updateStatus(`${player.name} gets another turn!`);
+                        this.render();
+                        if (this.currentPlayer.isBot) {
+                            this.gameTimeout = setTimeout(() => this.rollDice(), 800);
+                        }
+                    } else {
+                        this.nextTurn();
+                    }
+                } else {
+                    this.render();
+                }
+            }
+
+            captureOpponentIfAny(piece) {
+                const player = this.currentPlayer;
+                const pos = piece.position;
+
+                // Safe spots are protected from capture
+                if (SAFE_SPOTS.has(pos)) return false;
+
+                let captured = false;
+                this.players.forEach(opponent => {
+                    if (opponent.index === player.index) return;
+                    opponent.pieces.forEach(oppPiece => {
+                        if (oppPiece.isOnPath() && oppPiece.position === pos) {
+                            oppPiece.reset();
+                            captured = true;
+                        }
+                    });
+                });
+                return captured;
+            }
+
+            nextTurn() {
+                this.currentPlayerIndex = (this.currentPlayerIndex + 1) % 4;
+                this.diceRolled = false;
+                this.diceValue = 0;
+                this.selectedPiece = null;
+                this.render();
+                this.checkBotTurn();
+            }
+
+            checkBotTurn() {
+                if (this.currentPlayer.isBot && !this.gameOver) {
+                    document.getElementById('rollBtn').disabled = true;
+                    this.gameTimeout = setTimeout(() => this.rollDice(), 900);
+                } else {
+                    document.getElementById('rollBtn').disabled = false;
+                }
+            }
+
+            checkWin() {
+                const player = this.currentPlayer;
+                if (player.finishedPieces >= 4) {
+                    this.gameOver = true;
+                    this.showModal(`${player.name} Wins!`, 'Congratulations!');
+                }
+            }
+
+            updateStatus(message) {
+                document.getElementById('status').textContent = message;
+            }
+
+            showModal(title, message) {
+                document.getElementById('modalTitle').textContent = title;
+                document.getElementById('modalMessage').textContent = message;
+                document.getElementById('modalOverlay').classList.add('show');
+            }
+
+            render() {
+                const player = this.currentPlayer;
+                document.getElementById('turnText').textContent = `${player.name}'s turn`;
+                document.getElementById('turnDot').style.backgroundColor = PLAYER_COLORS[player.color];
+                document.getElementById('turnDot').style.boxShadow = `0 0 10px ${PLAYER_COLORS[player.color]}`;
+
+                if (!this.diceRolled) {
+                    document.getElementById('dice').textContent = '?';
+                }
+
+                this.players.forEach(p => {
+                    p.pieces.forEach((piece, i) => {
+                        let r, c;
+                        if (piece.isInHome()) {
+                            [r, c] = [7, 7]; // Center
+                        } else if (piece.isInYard()) {
+                            const spots = {
+                                red: [[1,1],[1,4],[4,1],[4,4]],
+                                blue: [[1,10],[1,13],[4,10],[4,13]],
+                                green: [[10,1],[10,4],[13,1],[13,4]],
+                                yellow: [[10,10],[10,13],[13,10],[13,13]]
+                            };
+                            [r, c] = spots[p.color][piece.id];
+                        } else if (piece.isOnPath()) {
+                            [r, c] = PATH_CELLS[piece.position];
+                        } else if (piece.homeColumnIndex >= 0) {
+                            [r, c] = HOME_COLUMNS[p.color][piece.homeColumnIndex];
+                        }
+                        this.board.placePiece(piece, r, c);
+                    });
+                });
+
+                // Highlight legal moves if dice rolled
+                if (this.diceRolled) {
+                    const legalMoves = this.getLegalMoves();
+                    this.highlightLegalMoves(legalMoves);
+                    if (legalMoves.length === 0) {
+                        this.updateStatus('No legal moves');
+                    }
+                }
+
+                this.board.updatePieceSpacing();
+            }
+        }
+
+        // ============================================================
+        // INITIALIZE
+        // ============================================================
+        document.addEventListener('DOMContentLoaded', () => {
+            window.game = new GameState();
+        });
+    </script>
+</body>
+</html>

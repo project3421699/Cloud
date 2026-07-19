@@ -1,0 +1,1605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Ludo – Mobile Edition</title>
+  <meta name="description" content="A feature-rich, mobile-optimised Ludo game with bot AI, built in a single HTML file." />
+  <style>
+    /* =====================================================================
+       DESIGN TOKENS – edit here to re-theme the entire game
+       ===================================================================== */
+    :root {
+      --clr-red:    #e53935;
+      --clr-blue:   #1e88e5;
+      --clr-green:  #43a047;
+      --clr-yellow: #fdd835;
+
+      --clr-red-light:    #ffcdd2;
+      --clr-blue-light:   #bbdefb;
+      --clr-green-light:  #c8e6c9;
+      --clr-yellow-light: #fff9c4;
+
+      --clr-red-dark:    #b71c1c;
+      --clr-blue-dark:   #0d47a1;
+      --clr-green-dark:  #1b5e20;
+      --clr-yellow-dark: #f9a825;
+
+      --clr-bg:       #1a1a2e;
+      --clr-surface:  #16213e;
+      --clr-border:   #0f3460;
+      --clr-text:     #e0e0e0;
+      --clr-text-dim: #9e9e9e;
+      --clr-white:    #ffffff;
+      --clr-safe:     #a5d6a7;
+      --clr-center:   #f5f5f5;
+
+      --board-size: min(96vw, 96vh, 540px);
+      --cell-size: calc(var(--board-size) / 15);
+      --piece-size: calc(var(--cell-size) * 0.55);
+
+      --transition-move: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      --transition-fast: 0.15s ease;
+
+      --font-main: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    }
+
+    /* =====================================================================
+       RESET & BASE
+       ===================================================================== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: var(--clr-bg);
+      color: var(--clr-text);
+      font-family: var(--font-main);
+      overflow-x: hidden;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 6px 16px;
+      min-height: 100vh;
+    }
+
+    /* =====================================================================
+       HEADER
+       ===================================================================== */
+    header {
+      text-align: center;
+      width: 100%;
+    }
+
+    header h1 {
+      font-size: clamp(1.3rem, 5vw, 2rem);
+      font-weight: 800;
+      letter-spacing: 3px;
+      background: linear-gradient(135deg, #e53935, #fdd835, #43a047, #1e88e5);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* =====================================================================
+       STATUS BAR
+       ===================================================================== */
+    #status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      max-width: 540px;
+      padding: 8px 14px;
+      background: var(--clr-surface);
+      border: 1px solid var(--clr-border);
+      border-radius: 12px;
+      font-size: clamp(0.75rem, 3.5vw, 0.95rem);
+      min-height: 44px;
+    }
+
+    #turn-indicator {
+      font-weight: 700;
+      letter-spacing: 1px;
+      transition: color var(--transition-fast);
+    }
+
+    #status-msg {
+      color: var(--clr-text-dim);
+      flex: 1;
+      text-align: right;
+      font-size: 0.82em;
+    }
+
+    /* =====================================================================
+       PLAYER SCORE CHIPS
+       ===================================================================== */
+    #score-row {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      max-width: 540px;
+    }
+
+    .score-chip {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      padding: 5px 8px;
+      border-radius: 10px;
+      border: 2px solid transparent;
+      font-size: clamp(0.62rem, 2.8vw, 0.8rem);
+      font-weight: 600;
+      opacity: 0.55;
+      transition: opacity var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+    }
+
+    .score-chip.active { opacity: 1; transform: scale(1.06); }
+    .score-chip.winner { opacity: 1; border-color: gold; }
+
+    .score-chip[data-player="0"] { background: var(--clr-red-light);    color: var(--clr-red-dark); }
+    .score-chip[data-player="1"] { background: var(--clr-green-light);  color: var(--clr-green-dark); }
+    .score-chip[data-player="2"] { background: var(--clr-yellow-light); color: var(--clr-yellow-dark); }
+    .score-chip[data-player="3"] { background: var(--clr-blue-light);   color: var(--clr-blue-dark); }
+
+    .chip-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* =====================================================================
+       LUDO BOARD  (15 × 15 CSS Grid)
+       ===================================================================== */
+    #board-wrapper {
+      width: var(--board-size);
+      height: var(--board-size);
+      flex-shrink: 0;
+    }
+
+    #board {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      grid-template-columns: repeat(15, 1fr);
+      grid-template-rows:    repeat(15, 1fr);
+      border: 3px solid var(--clr-border);
+      border-radius: 6px;
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+    }
+
+    /* ---- cells ---- */
+    .cell {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: default;
+      overflow: visible;
+    }
+
+    /* home quadrants */
+    .cell.home-red    { background: var(--clr-red-light); }
+    .cell.home-green  { background: var(--clr-green-light); }
+    .cell.home-yellow { background: var(--clr-yellow-light); }
+    .cell.home-blue   { background: var(--clr-blue-light); }
+
+    /* home-area inner box (6×6 inside each quadrant) */
+    .cell.home-inner-red    { background: var(--clr-red);    border-radius: 4px; margin: 8%; }
+    .cell.home-inner-green  { background: var(--clr-green);  border-radius: 4px; margin: 8%; }
+    .cell.home-inner-yellow { background: var(--clr-yellow); border-radius: 4px; margin: 8%; }
+    .cell.home-inner-blue   { background: var(--clr-blue);   border-radius: 4px; margin: 8%; }
+
+    /* path cells */
+    .cell.path       { background: var(--clr-white); }
+    .cell.path:hover { background: #fffde7; }
+
+    /* coloured path (home stretch) */
+    .cell.path-red    { background: var(--clr-red-light); }
+    .cell.path-green  { background: var(--clr-green-light); }
+    .cell.path-yellow { background: var(--clr-yellow-light); }
+    .cell.path-blue   { background: var(--clr-blue-light); }
+
+    /* safe cells */
+    .cell.safe { background: var(--clr-safe); }
+
+    /* centre winning triangle cells */
+    .cell.center-red    { background: var(--clr-red); }
+    .cell.center-green  { background: var(--clr-green); }
+    .cell.center-yellow { background: var(--clr-yellow); }
+    .cell.center-blue   { background: var(--clr-blue); }
+    .cell.center-white  { background: var(--clr-white); }
+
+    /* star marker */
+    .cell.safe::after {
+      content: '★';
+      font-size: calc(var(--cell-size) * 0.45);
+      color: rgba(0,0,0,0.25);
+      pointer-events: none;
+    }
+
+    /* arrow markers for home-stretch entries */
+    .cell.arrow::after {
+      content: attr(data-arrow);
+      font-size: calc(var(--cell-size) * 0.5);
+      color: rgba(0,0,0,0.3);
+      pointer-events: none;
+    }
+
+    /* highlight: movable piece cell */
+    .cell.highlight-move {
+      outline: 3px solid gold;
+      outline-offset: -3px;
+      z-index: 10;
+      animation: pulse-cell 0.7s ease-in-out infinite alternate;
+    }
+
+    @keyframes pulse-cell {
+      from { outline-color: gold; }
+      to   { outline-color: orange; }
+    }
+
+    /* ---- pieces ---- */
+    .piece {
+      position: absolute;
+      width: var(--piece-size);
+      height: var(--piece-size);
+      border-radius: 50%;
+      border: 2px solid rgba(0,0,0,0.4);
+      cursor: pointer;
+      z-index: 5;
+      transition: transform var(--transition-move), box-shadow var(--transition-fast), left var(--transition-move), top var(--transition-move);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: calc(var(--piece-size) * 0.42);
+      font-weight: 800;
+      color: rgba(255,255,255,0.9);
+      text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    }
+
+    .piece:hover { transform: scale(1.18); box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+
+    .piece[data-player="0"] { background: radial-gradient(circle at 35% 35%, #ef9a9a, var(--clr-red)); }
+    .piece[data-player="1"] { background: radial-gradient(circle at 35% 35%, #a5d6a7, var(--clr-green)); }
+    .piece[data-player="2"] { background: radial-gradient(circle at 35% 35%, #fff59d, var(--clr-yellow)); color: rgba(0,0,0,0.7); }
+    .piece[data-player="3"] { background: radial-gradient(circle at 35% 35%, #90caf9, var(--clr-blue)); }
+
+    .piece.selectable { animation: piece-bounce 0.5s ease-in-out infinite alternate; }
+
+    @keyframes piece-bounce {
+      from { transform: translateY(0) scale(1); box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
+      to   { transform: translateY(-3px) scale(1.1); box-shadow: 0 6px 16px rgba(255,215,0,0.6); }
+    }
+
+    .piece.captured { animation: piece-captured 0.4s ease-out; }
+
+    @keyframes piece-captured {
+      0%   { transform: scale(1.5); opacity: 1; }
+      100% { transform: scale(0.1); opacity: 0; }
+    }
+
+    /* =====================================================================
+       DICE + CONTROLS
+       ===================================================================== */
+    #controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      width: 100%;
+      max-width: 540px;
+    }
+
+    #dice-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #dice {
+      width: clamp(52px, 13vw, 68px);
+      height: clamp(52px, 13vw, 68px);
+      background: var(--clr-surface);
+      border: 2px solid var(--clr-border);
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      font-size: clamp(1.6rem, 6vw, 2.4rem);
+      cursor: pointer;
+      transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      position: relative;
+      overflow: hidden;
+    }
+
+    #dice:hover:not(.disabled) { transform: scale(1.08); box-shadow: 0 6px 20px rgba(0,0,0,0.5); }
+    #dice:active:not(.disabled) { transform: scale(0.94); }
+    #dice.disabled { opacity: 0.45; cursor: default; }
+
+    #dice.rolling { animation: dice-roll 0.5s ease; }
+
+    @keyframes dice-roll {
+      0%   { transform: rotate(0deg) scale(1); }
+      25%  { transform: rotate(-20deg) scale(0.9); }
+      50%  { transform: rotate(20deg) scale(1.1); }
+      75%  { transform: rotate(-10deg) scale(0.95); }
+      100% { transform: rotate(0deg) scale(1); }
+    }
+
+    #dice-label {
+      font-size: 0.7rem;
+      color: var(--clr-text-dim);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    #btn-new-game {
+      padding: 10px 20px;
+      background: linear-gradient(135deg, #0f3460, #1e88e5);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: clamp(0.8rem, 3.5vw, 0.95rem);
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 1px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+    }
+
+    #btn-new-game:hover  { transform: scale(1.05); box-shadow: 0 6px 20px rgba(30,136,229,0.4); }
+    #btn-new-game:active { transform: scale(0.96); }
+
+    /* =====================================================================
+       GAME LOG
+       ===================================================================== */
+    #log-wrap {
+      width: 100%;
+      max-width: 540px;
+    }
+
+    #game-log {
+      background: var(--clr-surface);
+      border: 1px solid var(--clr-border);
+      border-radius: 10px;
+      padding: 8px 12px;
+      height: 72px;
+      overflow-y: auto;
+      font-size: clamp(0.68rem, 2.8vw, 0.78rem);
+      color: var(--clr-text-dim);
+      display: flex;
+      flex-direction: column-reverse;
+      gap: 2px;
+    }
+
+    .log-entry { padding: 1px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .log-entry.log-red    { color: #ef9a9a; }
+    .log-entry.log-green  { color: #a5d6a7; }
+    .log-entry.log-yellow { color: #fff59d; }
+    .log-entry.log-blue   { color: #90caf9; }
+
+    /* =====================================================================
+       WINNER OVERLAY
+       ===================================================================== */
+    #winner-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.75);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(4px);
+    }
+
+    #winner-overlay.show { display: flex; }
+
+    #winner-card {
+      background: var(--clr-surface);
+      border: 2px solid var(--clr-border);
+      border-radius: 24px;
+      padding: 36px 48px;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+      animation: card-in 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    @keyframes card-in {
+      from { transform: scale(0.5) translateY(60px); opacity: 0; }
+      to   { transform: scale(1) translateY(0); opacity: 1; }
+    }
+
+    #winner-card h2 {
+      font-size: 2rem;
+      margin-bottom: 6px;
+      background: linear-gradient(135deg, gold, orange);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    #winner-card p  { color: var(--clr-text-dim); margin-bottom: 20px; }
+
+    #btn-play-again {
+      padding: 12px 32px;
+      background: linear-gradient(135deg, gold, orange);
+      color: #1a1a2e;
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform var(--transition-fast);
+    }
+
+    #btn-play-again:hover { transform: scale(1.06); }
+
+    /* =====================================================================
+       SETUP MODAL
+       ===================================================================== */
+    #setup-overlay {
+      display: flex;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(6px);
+    }
+
+    #setup-card {
+      background: var(--clr-surface);
+      border: 2px solid var(--clr-border);
+      border-radius: 24px;
+      padding: 28px 32px;
+      width: min(340px, 90vw);
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+      animation: card-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    #setup-card h2 { margin-bottom: 4px; font-size: 1.4rem; }
+    #setup-card p  { color: var(--clr-text-dim); font-size: 0.82rem; margin-bottom: 18px; }
+
+    .setup-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+      gap: 10px;
+    }
+
+    .setup-row label { font-size: 0.88rem; font-weight: 600; text-align: left; }
+
+    .player-toggle {
+      display: flex;
+      gap: 4px;
+    }
+
+    .player-toggle button {
+      padding: 5px 12px;
+      border-radius: 8px;
+      border: 2px solid var(--clr-border);
+      background: var(--clr-bg);
+      color: var(--clr-text-dim);
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+
+    .player-toggle button.selected {
+      background: var(--clr-blue);
+      color: white;
+      border-color: var(--clr-blue);
+    }
+
+    #btn-start-game {
+      width: 100%;
+      padding: 13px;
+      background: linear-gradient(135deg, #1b5e20, #43a047);
+      color: white;
+      border: none;
+      border-radius: 14px;
+      font-size: 1rem;
+      font-weight: 800;
+      cursor: pointer;
+      letter-spacing: 1px;
+      margin-top: 6px;
+      box-shadow: 0 4px 16px rgba(67,160,71,0.4);
+      transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+    }
+
+    #btn-start-game:hover  { transform: scale(1.04); box-shadow: 0 6px 24px rgba(67,160,71,0.5); }
+    #btn-start-game:active { transform: scale(0.97); }
+
+    /* =====================================================================
+       RESPONSIVE TWEAKS
+       ===================================================================== */
+    @media (max-height: 680px) {
+      body { gap: 6px; padding: 6px 4px 10px; }
+      #game-log { height: 54px; }
+    }
+  </style>
+</head>
+<body>
+
+<header><h1>⬛ LUDO ⬛</h1></header>
+
+<div id="score-row">
+  <div class="score-chip" data-player="0" id="chip-0"><span class="chip-dot" style="background:var(--clr-red)"></span>Red</div>
+  <div class="score-chip" data-player="1" id="chip-1"><span class="chip-dot" style="background:var(--clr-green)"></span>Green</div>
+  <div class="score-chip" data-player="2" id="chip-2"><span class="chip-dot" style="background:var(--clr-yellow)"></span>Yellow</div>
+  <div class="score-chip" data-player="3" id="chip-3"><span class="chip-dot" style="background:var(--clr-blue)"></span>Blue</div>
+</div>
+
+<div id="status-bar">
+  <span id="turn-indicator">🎲 Roll to begin</span>
+  <span id="status-msg"></span>
+</div>
+
+<div id="board-wrapper">
+  <div id="board"></div>
+</div>
+
+<div id="controls">
+  <div id="dice-wrap">
+    <div id="dice" title="Click to roll">🎲</div>
+    <span id="dice-label">Tap to roll</span>
+  </div>
+  <button id="btn-new-game">New Game</button>
+</div>
+
+<div id="log-wrap">
+  <div id="game-log"></div>
+</div>
+
+<!-- Winner Overlay -->
+<div id="winner-overlay">
+  <div id="winner-card">
+    <div style="font-size:3rem">🏆</div>
+    <h2 id="winner-text">Red Wins!</h2>
+    <p id="winner-sub">Congratulations!</p>
+    <button id="btn-play-again">Play Again</button>
+  </div>
+</div>
+
+<!-- Setup Overlay -->
+<div id="setup-overlay">
+  <div id="setup-card">
+    <h2>🎲 Ludo</h2>
+    <p>Configure players and start the game</p>
+
+    <div class="setup-row">
+      <label>Red</label>
+      <div class="player-toggle" id="toggle-0">
+        <button data-val="human" class="selected">Human</button>
+        <button data-val="bot">Bot</button>
+      </div>
+    </div>
+    <div class="setup-row">
+      <label>Green</label>
+      <div class="player-toggle" id="toggle-1">
+        <button data-val="human">Human</button>
+        <button data-val="bot" class="selected">Bot</button>
+      </div>
+    </div>
+    <div class="setup-row">
+      <label>Yellow</label>
+      <div class="player-toggle" id="toggle-2">
+        <button data-val="human">Human</button>
+        <button data-val="bot" class="selected">Bot</button>
+      </div>
+    </div>
+    <div class="setup-row">
+      <label>Blue</label>
+      <div class="player-toggle" id="toggle-3">
+        <button data-val="human">Human</button>
+        <button data-val="bot" class="selected">Bot</button>
+      </div>
+    </div>
+
+    <button id="btn-start-game">▶ Start Game</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* =========================================================================
+   CONSTANTS & BOARD DEFINITIONS
+   ========================================================================= */
+
+const PLAYER_COLORS   = ['red', 'green', 'yellow', 'blue'];
+const PLAYER_NAMES    = ['Red', 'Green', 'Yellow', 'Blue'];
+const DICE_FACES      = ['⚀','⚁','⚂','⚃','⚄','⚅'];
+
+// Safe cell global indices (0-based, on the 52-step outer path)
+const SAFE_POSITIONS = new Set([0, 8, 13, 21, 26, 34, 39, 47]);
+
+// Each player's start position on the shared 52-step path (0-based)
+const PLAYER_START = [0, 13, 26, 39];
+
+// The 52 outer-path cells mapped to [row, col] on the 15×15 board (0-based)
+// Traversal order: Red starts at index 0 (top-left area) going clockwise
+const PATH_COORDS = [
+  // Red start zone → right (row 6, cols 0..5)
+  [6,1],[6,2],[6,3],[6,4],[6,5],
+  // down to row 8 column 5
+  [5,6],[4,6],[3,6],[2,6],[1,6],
+  // right across row 0..2 col 7 (going down)
+  [0,6],
+  // corner & go right
+  [0,7],[0,8],
+  // down col 8 top to mid
+  [1,8],[2,8],[3,8],[4,8],[5,8],
+  // right to far right
+  [6,9],[6,10],[6,11],[6,12],[6,13],
+  // corner
+  [6,14],
+  // down col 14 right side → going down
+  [7,14],[8,14],
+  // left across row 8 right
+  [8,13],[8,12],[8,11],[8,10],[8,9],
+  // go down col 9 bottom
+  [9,8],[10,8],[11,8],[12,8],[13,8],
+  // corner
+  [14,8],
+  // left across bottom
+  [14,7],[14,6],
+  // up col 6 bottom
+  [13,6],[12,6],[11,6],[10,6],[9,6],
+  // left to home zone bottom
+  [8,5],[8,4],[8,3],[8,2],[8,1],
+  // corner
+  [8,0],
+  // up col 0 left
+  [7,0],[6,0]  // not used – step wraps
+];
+
+// Home-stretch cells for each player [row,col] from entry to cell before center (6 cells each)
+const HOME_STRETCH = [
+  // Red: goes right along row 7, cols 1..6
+  [[7,1],[7,2],[7,3],[7,4],[7,5],[7,6]],
+  // Green: goes down col 7, rows 1..6
+  [[1,7],[2,7],[3,7],[4,7],[5,7],[6,7]],
+  // Yellow: goes left along row 7, cols 13..8
+  [[7,13],[7,12],[7,11],[7,10],[7,9],[7,8]],
+  // Blue: goes up col 7, rows 13..8
+  [[13,7],[12,7],[11,7],[10,7],[9,7],[8,7]],
+];
+
+// Piece start (spawn) positions inside each home quadrant [row,col]
+const SPAWN_COORDS = [
+  // Red (top-left quadrant)
+  [[1,1],[1,3],[3,1],[3,3]],
+  // Green (top-right)
+  [[1,11],[1,13],[3,11],[3,13]],
+  // Yellow (bottom-right)
+  [[11,11],[11,13],[13,11],[13,13]],
+  // Blue (bottom-left)
+  [[11,1],[11,3],[13,1],[13,3]],
+];
+
+// Path index where each player enters the HOME_STRETCH (exclusive – piece at this index can step into stretch)
+// Red enters after path index 50 (wraps from 51 → stretch)
+// Computed: Player p enters stretch after PLAYER_START[p]-1 (mod 52) = (PLAYER_START[p]+51)%52
+const STRETCH_ENTRY = [51, 12, 25, 38]; // path index BEFORE entering stretch
+
+/* =========================================================================
+   UTILITY
+   ========================================================================= */
+function randomInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+function rollDie() { return randomInt(1, 6); }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+/* =========================================================================
+   PIECE CLASS
+   ========================================================================= */
+class Piece {
+  /**
+   * @param {number} playerId  0-3
+   * @param {number} pieceId   0-3
+   */
+  constructor(playerId, pieceId) {
+    this.playerId = playerId;
+    this.pieceId  = pieceId;
+    this.id       = `p${playerId}_${pieceId}`;
+
+    // position encoding:
+    //  -1          → home (not yet entered)
+    //   0..51      → outer path index (relative offset from player's own start)
+    //   52..57     → home stretch steps 0..5 (52 = stretch[0])
+    //   58         → finished (in center)
+    this.pos = -1;
+
+    this.el = null; // DOM element, set by BoardRenderer
+  }
+
+  get isHome()     { return this.pos === -1; }
+  get isFinished() { return this.pos === 58; }
+  get isOnPath()   { return this.pos >= 0 && this.pos < 52; }
+  get isOnStretch(){ return this.pos >= 52 && this.pos <= 57; }
+
+  /** Absolute path index on the 52-step board for collision detection */
+  get absPathIndex() {
+    if (!this.isOnPath) return -1;
+    return (PLAYER_START[this.playerId] + this.pos) % 52;
+  }
+
+  clone() {
+    const c = new Piece(this.playerId, this.pieceId);
+    c.pos = this.pos;
+    return c;
+  }
+}
+
+/* =========================================================================
+   PLAYER CLASS
+   ========================================================================= */
+class Player {
+  /**
+   * @param {number} id       0-3
+   * @param {'human'|'bot'} type
+   */
+  constructor(id, type = 'human') {
+    this.id     = id;
+    this.type   = type;
+    this.name   = PLAYER_NAMES[id];
+    this.color  = PLAYER_COLORS[id];
+    this.pieces = Array.from({length: 4}, (_, i) => new Piece(id, i));
+    this.finished = false; // all 4 pieces home
+    this.rank   = null;    // finishing rank
+  }
+
+  get piecesFinished() { return this.pieces.filter(p => p.isFinished).length; }
+  get hasAllHome()     { return this.pieces.every(p => p.isHome); }
+  get hasAllFinished() { return this.pieces.every(p => p.isFinished); }
+}
+
+/* =========================================================================
+   AUTO PLAYER (BOT)
+   ========================================================================= */
+class AutoPlayer {
+  /**
+   * @param {Player} player
+   */
+  constructor(player) {
+    this.player = player;
+  }
+
+  /**
+   * Choose a piece to move given a dice value.
+   * Returns the chosen Piece or null if no legal move.
+   * @param {number} dice
+   * @param {GameState} state
+   * @returns {Piece|null}
+   */
+  chooseMove(dice, state) {
+    const legal = state.getLegalMoves(this.player, dice);
+    if (legal.length === 0) return null;
+
+    // Phase 1: Random legal move
+    // ─────────────────────────
+    // return legal[Math.floor(Math.random() * legal.length)];
+
+    // Phase 2: Heuristic evaluation
+    // ──────────────────────────────
+    // TODO: Implement Heuristic Logic
+    // Suggested evaluation factors (higher score = better move):
+    //   1. CAPTURE:         +100 if moving to a cell occupied by an opponent → sends them home
+    //   2. SAFE ZONE:       +30  if destination is a SAFE_POSITION (star)
+    //   3. ENTER BOARD:     +20  if piece is at home and dice is 6 (enters board)
+    //   4. HOME-RUN FOCUS:  +15  if piece is on home stretch (closer to victory)
+    //   5. ADVANCE LEADER:  +10  for advancing the piece that is furthest along
+    //   6. AVOID DANGER:    −20  if current or destination cell is vulnerable to capture
+    //
+    // Example skeleton:
+    //   const scored = legal.map(piece => ({
+    //     piece,
+    //     score: this._evaluate(piece, dice, state)
+    //   }));
+    //   scored.sort((a, b) => b.score - a.score);
+    //   return scored[0].piece;
+
+    // Fallback: weighted heuristic (current implementation)
+    return this._weightedHeuristic(legal, dice, state);
+  }
+
+  _weightedHeuristic(legal, dice, state) {
+    const scored = legal.map(piece => ({
+      piece,
+      score: this._evaluate(piece, dice, state)
+    }));
+    scored.sort((a, b) => b.score - a.score);
+
+    // Add slight randomness to top equally-scored candidates
+    const best = scored[0].score;
+    const topCandidates = scored.filter(s => s.score >= best - 5);
+    return topCandidates[Math.floor(Math.random() * topCandidates.length)].piece;
+  }
+
+  _evaluate(piece, dice, state) {
+    let score = 0;
+    const pid = this.player.id;
+
+    // TODO: Implement Heuristic Logic
+    // Replace or extend the rules below with a minimax or weight-based evaluation.
+
+    // Rule 1: Entering board on a 6
+    if (piece.isHome && dice === 6) score += 25;
+
+    // Rule 2: Piece on home-stretch (prioritise finishing)
+    if (piece.isOnStretch) score += 20 + piece.pos;
+
+    // Rule 3: Would capture an opponent?
+    const destAbsIdx = this._simulateDestination(piece, dice);
+    if (destAbsIdx !== null) {
+      const captures = state.getOpponentsAt(pid, destAbsIdx);
+      if (captures.length > 0) score += 60 * captures.length;
+    }
+
+    // Rule 4: Landing on a safe cell
+    if (destAbsIdx !== null && SAFE_POSITIONS.has(destAbsIdx)) score += 15;
+
+    // Rule 5: Advance the piece furthest along the path (general progress)
+    score += Math.max(0, piece.pos) * 0.3;
+
+    return score;
+  }
+
+  /** Returns the absolute path index of where piece lands after rolling dice, or null */
+  _simulateDestination(piece, dice) {
+    if (piece.isHome || piece.isFinished || piece.isOnStretch) return null;
+    const newRelPos = piece.pos + dice;
+    if (newRelPos >= 51) return null; // entering stretch or finishing, no capture
+    const absIdx = (PLAYER_START[this.player.id] + newRelPos) % 52;
+    return absIdx;
+  }
+}
+
+/* =========================================================================
+   GAME STATE
+   ========================================================================= */
+class GameState {
+  constructor() {
+    this.players     = [];
+    this.current     = 0;    // index into players
+    this.dice        = 0;
+    this.phase       = 'SETUP'; // SETUP | ROLL | SELECT | BOT_THINKING | GAME_OVER
+    this.rollCount   = 0;    // consecutive 6s
+    this.rankings    = [];   // finished player ids in order
+    this.listeners   = {};   // simple event bus
+  }
+
+  on(event, cb)   { (this.listeners[event] = this.listeners[event] || []).push(cb); }
+  emit(event, data){ (this.listeners[event] || []).forEach(cb => cb(data)); }
+
+  get currentPlayer() { return this.players[this.current]; }
+
+  init(playerTypes) {
+    this.players  = playerTypes.map((t, i) => new Player(i, t));
+    this.current  = 0;
+    this.dice     = 0;
+    this.phase    = 'ROLL';
+    this.rollCount= 0;
+    this.rankings = [];
+    this.emit('init', this);
+  }
+
+  /**
+   * Roll the dice. Returns the rolled value.
+   */
+  performRoll() {
+    this.dice = rollDie();
+    this.rollCount++;
+    this.emit('rolled', { dice: this.dice, player: this.currentPlayer });
+
+    const legal = this.getLegalMoves(this.currentPlayer, this.dice);
+
+    if (legal.length === 0) {
+      // No moves – forfeit turn (unless it's a 6 and all pieces home – still stuck)
+      this.emit('noMoves', { player: this.currentPlayer, dice: this.dice });
+      this._advanceTurn();
+      return this.dice;
+    }
+
+    if (this.rollCount >= 3 && this.dice === 6) {
+      // Three consecutive 6s: forfeit turn
+      this.emit('threeConsecutiveSixes', { player: this.currentPlayer });
+      this._advanceTurnHard();
+      return this.dice;
+    }
+
+    this.phase = 'SELECT';
+    this.emit('awaitSelect', { legal, dice: this.dice, player: this.currentPlayer });
+    return this.dice;
+  }
+
+  /**
+   * Move a piece. Returns true if successful.
+   * @param {Piece} piece
+   */
+  movePiece(piece) {
+    if (this.phase !== 'SELECT') return false;
+
+    const player = this.players[piece.playerId];
+    const legal  = this.getLegalMoves(player, this.dice);
+    if (!legal.includes(piece)) return false;
+
+    const oldPos = piece.pos;
+    this._applyMove(piece, this.dice);
+    this.emit('moved', { piece, oldPos, newPos: piece.pos, player });
+
+    // Check capture
+    if (piece.isOnPath) {
+      const abs = piece.absPathIndex;
+      if (!SAFE_POSITIONS.has(abs)) {
+        this.players.forEach((opp, oi) => {
+          if (oi === player.id) return;
+          opp.pieces.forEach(op => {
+            if (op.isOnPath && op.absPathIndex === abs) {
+              const capturedPos = op.pos;
+              op.pos = -1; // send home
+              this.emit('captured', { capturer: piece, victim: op, capturedPos });
+            }
+          });
+        });
+      }
+    }
+
+    // Check finish
+    if (player.hasAllFinished && !player.finished) {
+      player.finished = true;
+      this.rankings.push(player.id);
+      player.rank = this.rankings.length;
+      this.emit('playerFinished', { player });
+    }
+
+    // Check game over (only 1 human player left, or all finished)
+    const active = this.players.filter(p => !p.finished);
+    if (active.length <= 1) {
+      if (active.length === 1) {
+        active[0].finished = true;
+        this.rankings.push(active[0].id);
+        active[0].rank = this.rankings.length;
+      }
+      this.phase = 'GAME_OVER';
+      this.emit('gameOver', { rankings: this.rankings, players: this.players });
+      return true;
+    }
+
+    // Rolling a 6 grants another turn
+    if (this.dice === 6) {
+      this.rollCount = (this.rollCount >= 2) ? this.rollCount : this.rollCount; // keep count
+      this.phase = 'ROLL';
+      this.emit('bonusTurn', { player });
+    } else {
+      this._advanceTurnHard();
+    }
+
+    return true;
+  }
+
+  /**
+   * Get all pieces of player that can legally move given a dice roll.
+   */
+  getLegalMoves(player, dice) {
+    return player.pieces.filter(piece => {
+      if (piece.isFinished) return false;
+      if (piece.isHome)     return dice === 6; // only a 6 gets you out
+      if (piece.isOnStretch) {
+        // pos 52..57 = stretch cells 0..5; landing on stretchIdx 6 = finish
+        const stretchIdx = piece.pos - 52; // current 0-based stretch cell (0..5)
+        const newIdx = stretchIdx + dice;  // must be ≤ 6 to finish exactly, not overshoot
+        return newIdx <= 6;
+      }
+      // On outer path (pos 0..51, i.e. 52 cells total)
+      const newRelPos = piece.pos + dice;
+      // Stretch starts when newRelPos > 51.
+      // stepsIntoStretch: 1 = stretch[0], …, 6 = stretch[5], 7 = finish
+      const stepsIntoStretch = newRelPos - 51; // >= 1 means entering stretch
+      if (stepsIntoStretch > 0) return stepsIntoStretch <= 7; // ≤7 to finish, not overshoot
+      return true; // normal path move (newRelPos 0..51)
+    });
+  }
+
+  /**
+   * Returns opponent pieces at a given absolute path index (for capture check).
+   */
+  getOpponentsAt(playerId, absIdx) {
+    const result = [];
+    this.players.forEach((p, pi) => {
+      if (pi === playerId) return;
+      p.pieces.forEach(piece => {
+        if (piece.isOnPath && piece.absPathIndex === absIdx) {
+          result.push(piece);
+        }
+      });
+    });
+    return result;
+  }
+
+  // ---- private ----
+
+  _applyMove(piece, dice) {
+    if (piece.isHome) {
+      piece.pos = 0; // enter board at relative path position 0 (player's own start cell)
+      return;
+    }
+
+    if (piece.isOnStretch) {
+      // pos encoding: 52 = stretch[0] … 57 = stretch[5]; 58 = finished
+      const stretchIdx = piece.pos - 52; // current 0-based stretch cell (0..5)
+      const newIdx     = stretchIdx + dice;
+      // newIdx 0..5 → pos 52..57; newIdx >= 6 → finished (pos 58)
+      piece.pos = newIdx >= 6 ? 58 : 52 + newIdx;
+      return;
+    }
+
+    // On outer path (pos 0..51, 52 total cells)
+    const newRelPos = piece.pos + dice;
+    // Stretch begins when newRelPos > 51.
+    // stepsIntoStretch: 1 = stretch[0] (pos 52), …, 6 = stretch[5] (pos 57), 7 = finish (pos 58)
+    const stepsIntoStretch = newRelPos - 51; // >= 1 means crossing into stretch
+
+    if (stepsIntoStretch <= 0) {
+      piece.pos = newRelPos; // normal outer-path advance
+    } else {
+      // stepsIntoStretch 1 → stretch cell 0 (pos 52)
+      // stepsIntoStretch 6 → stretch cell 5 (pos 57)
+      // stepsIntoStretch 7 → finished       (pos 58)
+      const newStretchIdx = stepsIntoStretch - 1; // 0-based stretch index
+      piece.pos = newStretchIdx >= 6 ? 58 : 52 + newStretchIdx;
+    }
+  }
+
+  _advanceTurn() {
+    this.rollCount = 0;
+    this.current   = (this.current + 1) % this.players.length;
+    while (this.players[this.current].finished) {
+      this.current = (this.current + 1) % this.players.length;
+    }
+    this.phase = 'ROLL';
+    this.emit('turnChanged', { player: this.currentPlayer });
+  }
+
+  _advanceTurnHard() {
+    this.rollCount = 0;
+    this.current   = (this.current + 1) % this.players.length;
+    while (this.players[this.current].finished) {
+      this.current = (this.current + 1) % this.players.length;
+    }
+    this.phase = 'ROLL';
+    this.emit('turnChanged', { player: this.currentPlayer });
+  }
+}
+
+/* =========================================================================
+   BOARD RENDERER
+   ========================================================================= */
+class BoardRenderer {
+  constructor(boardEl) {
+    this.boardEl = boardEl;
+    this.cellEls = []; // 15×15 flat array [row*15+col]
+    this._buildGrid();
+  }
+
+  /** Create the 15×15 grid cells */
+  _buildGrid() {
+    this.boardEl.innerHTML = '';
+    this.cellEls = [];
+    for (let r = 0; r < 15; r++) {
+      for (let c = 0; c < 15; c++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.dataset.row = r;
+        cell.dataset.col = c;
+        this.boardEl.appendChild(cell);
+        this.cellEls.push(cell);
+      }
+    }
+    this._applyBoardColors();
+  }
+
+  cell(r, c) { return this.cellEls[r * 15 + c]; }
+
+  /** Paint the static board zones */
+  _applyBoardColors() {
+    const C = (r, c, cls) => this.cell(r, c).classList.add(cls);
+
+    // Home quadrants (6×6 each)
+    for (let r = 0; r < 6; r++) {
+      for (let c = 0; c < 6; c++) {
+        C(r, c, 'home-red');
+        C(r, c+9, 'home-green');
+        C(r+9, c, 'home-blue');
+        C(r+9, c+9, 'home-yellow');
+      }
+    }
+
+    // Inner coloured boxes (4×4 inside each home)
+    for (let r = 1; r <= 4; r++) {
+      for (let c = 1; c <= 4; c++) {
+        C(r, c, 'home-inner-red');
+        C(r, c+9, 'home-inner-green');
+        C(r+9, c, 'home-inner-blue');
+        C(r+9, c+9, 'home-inner-yellow');
+      }
+    }
+
+    // Outer path cells (52 steps)
+    PATH_COORDS.forEach(([r, c]) => {
+      const cell = this.cell(r, c);
+      cell.classList.add('path');
+      cell.dataset.pathIdx = PATH_COORDS.findIndex(([pr,pc]) => pr===r && pc===c);
+    });
+
+    // Safe cells
+    SAFE_POSITIONS.forEach(idx => {
+      const [r, c] = PATH_COORDS[idx];
+      const cell = this.cell(r, c);
+      cell.classList.remove('path');
+      cell.classList.add('safe');
+    });
+
+    // Home-stretch paths (6 cells each)
+    const stretchColors = ['path-red','path-green','path-yellow','path-blue'];
+    HOME_STRETCH.forEach((stretch, pi) => {
+      stretch.forEach(([r,c]) => {
+        const cell = this.cell(r, c);
+        cell.classList.add(stretchColors[pi]);
+      });
+    });
+
+    // Center 3×3 (rows 6-8, cols 6-8)
+    const centerScheme = [
+      ['center-red','center-white','center-green'],
+      ['center-white','center-white','center-white'],
+      ['center-blue','center-white','center-yellow'],
+    ];
+    for (let dr = 0; dr < 3; dr++) {
+      for (let dc = 0; dc < 3; dc++) {
+        const cell = this.cell(6+dr, 6+dc);
+        cell.className = 'cell ' + centerScheme[dr][dc];
+      }
+    }
+
+    // Arrow cells (entry points to home stretch)
+    const arrows = [
+      { rc: [6,0], arrow: '▶', cls: 'arrow path' },   // Red enters
+      { rc: [0,8], arrow: '▼', cls: 'arrow path' },   // Green enters
+      { rc: [8,14],arrow: '◀', cls: 'arrow path' },  // Yellow enters
+      { rc: [14,6],arrow: '▲', cls: 'arrow path' },  // Blue enters
+    ];
+    arrows.forEach(({ rc, arrow, cls }) => {
+      const cell = this.cell(rc[0], rc[1]);
+      cell.className = 'cell ' + cls;
+      cell.dataset.arrow = arrow;
+    });
+  }
+
+  /** Get the pixel-centre of a board cell relative to the board element */
+  _cellCenter(r, c) {
+    const boardRect = this.boardEl.getBoundingClientRect();
+    const cw = boardRect.width / 15;
+    const ch = boardRect.height / 15;
+    return {
+      x: c * cw + cw / 2,
+      y: r * ch + ch / 2,
+    };
+  }
+
+  /** Place or move a piece's DOM element */
+  renderPiece(piece, players) {
+    const player = players[piece.playerId];
+
+    // Create DOM element if needed
+    if (!piece.el) {
+      const el = document.createElement('div');
+      el.className = 'piece';
+      el.dataset.player = piece.playerId;
+      el.dataset.pieceId = piece.pieceId;
+      el.id = piece.id;
+      el.title = `${player.name} #${piece.pieceId + 1}`;
+      el.textContent = piece.pieceId + 1;
+      this.boardEl.appendChild(el);
+      piece.el = el;
+    }
+
+    const [r, c] = this._getPieceCoords(piece, players);
+    this._positionPieceEl(piece.el, r, c, piece, players);
+  }
+
+  _getPieceCoords(piece, players) {
+    if (piece.isHome) {
+      return SPAWN_COORDS[piece.playerId][piece.pieceId];
+    }
+    if (piece.isFinished) {
+      // Stack in center
+      return [7, 7];
+    }
+    if (piece.isOnStretch) {
+      const stretchIdx = piece.pos - 52; // 0..5
+      return HOME_STRETCH[piece.playerId][stretchIdx];
+    }
+    // On outer path
+    const absIdx = piece.absPathIndex;
+    return PATH_COORDS[absIdx];
+  }
+
+  _positionPieceEl(el, r, c, piece, players) {
+    const boardRect = this.boardEl.getBoundingClientRect();
+    const cw = boardRect.width / 15;
+    const ch = boardRect.height / 15;
+    const pw = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--piece-size')) || (cw * 0.55);
+
+    // Offset to avoid overlap when multiple pieces on same cell
+    const sameCell = players.flatMap(p => p.pieces).filter(p => {
+      if (p.id === piece.id) return false;
+      if (p.isFinished && piece.isFinished) return true;
+      if (p.isOnPath && piece.isOnPath && p.absPathIndex === piece.absPathIndex) return true;
+      if (p.isHome && piece.isHome && p.playerId === piece.playerId) return false; // different spawn coords
+      return false;
+    });
+
+    const stackIdx = players.flatMap(p => p.pieces).filter(p => {
+      if (p.isFinished && piece.isFinished) return p.id < piece.id;
+      if (p.isOnPath && piece.isOnPath && p.absPathIndex === piece.absPathIndex) return p.id < piece.id;
+      return false;
+    }).length;
+
+    const offsets = [[0,0],[0.35,0],[0,0.35],[0.35,0.35]];
+    const [ox, oy] = offsets[Math.min(stackIdx, 3)];
+
+    const baseX = c * cw + (cw - pw) / 2;
+    const baseY = r * ch + (ch - pw) / 2;
+
+    el.style.width  = pw + 'px';
+    el.style.height = pw + 'px';
+    el.style.left   = (baseX + ox * (cw * 0.35)) + 'px';
+    el.style.top    = (baseY + oy * (ch * 0.35)) + 'px';
+    el.style.fontSize = (pw * 0.42) + 'px';
+  }
+
+  /** Highlight selectable pieces */
+  setSelectable(pieces) {
+    document.querySelectorAll('.piece').forEach(el => el.classList.remove('selectable'));
+    pieces.forEach(piece => {
+      if (piece.el) piece.el.classList.add('selectable');
+    });
+  }
+
+  clearSelectable() {
+    document.querySelectorAll('.piece').forEach(el => el.classList.remove('selectable'));
+  }
+
+  /** Trigger a brief capture animation then re-render */
+  animateCapture(piece) {
+    if (piece.el) {
+      piece.el.classList.add('captured');
+      piece.el.addEventListener('animationend', () => piece.el.classList.remove('captured'), { once: true });
+    }
+  }
+
+  rerenderAll(players) {
+    players.forEach(player => {
+      player.pieces.forEach(piece => this.renderPiece(piece, players));
+    });
+  }
+}
+
+/* =========================================================================
+   GAME CONTROLLER
+   ========================================================================= */
+class GameController {
+  constructor() {
+    this.state    = new GameState();
+    this.renderer = new BoardRenderer(document.getElementById('board'));
+    this.bots     = {};
+
+    this._bindUI();
+    this._bindStateEvents();
+  }
+
+  // ---- UI bindings ----
+
+  _bindUI() {
+    document.getElementById('dice').addEventListener('click', () => this._onDiceClick());
+    document.getElementById('board').addEventListener('click', e => this._onBoardClick(e));
+    document.getElementById('btn-new-game').addEventListener('click', () => this._showSetup());
+    document.getElementById('btn-play-again').addEventListener('click', () => this._showSetup());
+    document.getElementById('btn-start-game').addEventListener('click', () => this._startGame());
+
+    // Setup toggles
+    [0,1,2,3].forEach(i => {
+      document.getElementById(`toggle-${i}`).querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.getElementById(`toggle-${i}`).querySelectorAll('button').forEach(b => b.classList.remove('selected'));
+          btn.classList.add('selected');
+        });
+      });
+    });
+  }
+
+  _showSetup() {
+    document.getElementById('winner-overlay').classList.remove('show');
+    document.getElementById('setup-overlay').style.display = 'flex';
+  }
+
+  _startGame() {
+    const types = [0,1,2,3].map(i => {
+      const sel = document.getElementById(`toggle-${i}`).querySelector('button.selected');
+      return sel ? sel.dataset.val : 'human';
+    });
+
+    document.getElementById('setup-overlay').style.display = 'none';
+    this.state.init(types);
+  }
+
+  // ---- State event bindings ----
+
+  _bindStateEvents() {
+    const S = this.state;
+
+    S.on('init', () => {
+      // Create bots
+      this.bots = {};
+      S.players.forEach(p => {
+        if (p.type === 'bot') this.bots[p.id] = new AutoPlayer(p);
+      });
+
+      // Render board & pieces
+      this.renderer._buildGrid();
+      this.renderer.rerenderAll(S.players);
+      this._updateScoreChips();
+      this._updateStatusBar();
+      this._clearLog();
+      this._log('system', '🎮 New game started!');
+
+      // If first player is a bot, trigger its turn
+      if (S.currentPlayer.type === 'bot') {
+        this._scheduleBotTurn();
+      }
+    });
+
+    S.on('rolled', ({ dice, player }) => {
+      this._setDiceFace(dice);
+      this._log(player.color, `${player.name} rolled a ${dice}`);
+      this._updateStatusBar();
+    });
+
+    S.on('noMoves', ({ player, dice }) => {
+      this._log(player.color, `${player.name} rolled ${dice} – no moves. Turn skipped.`);
+      this._updateStatusBar();
+      setTimeout(() => {
+        this._updateStatusBar();
+        if (S.currentPlayer.type === 'bot') this._scheduleBotTurn();
+      }, 700);
+    });
+
+    S.on('threeConsecutiveSixes', ({ player }) => {
+      this._log(player.color, `${player.name} rolled 3 sixes – turn forfeited!`);
+      setTimeout(() => {
+        if (S.currentPlayer.type === 'bot') this._scheduleBotTurn();
+        this._updateStatusBar();
+      }, 700);
+    });
+
+    S.on('awaitSelect', ({ legal, player }) => {
+      this._updateStatusBar();
+      if (player.type === 'bot') {
+        this.renderer.clearSelectable();
+        this._scheduleBotMove();
+      } else {
+        this.renderer.setSelectable(legal);
+      }
+    });
+
+    S.on('moved', ({ piece, player }) => {
+      this.renderer.rerenderAll(S.players);
+      this._log(player.color, `${player.name} moved piece ${piece.pieceId + 1}`);
+      this._updateScoreChips();
+    });
+
+    S.on('captured', ({ capturer, victim }) => {
+      this.renderer.animateCapture(victim);
+      setTimeout(() => this.renderer.rerenderAll(S.players), 420);
+      const capper = S.players[capturer.playerId];
+      const loser  = S.players[victim.playerId];
+      this._log(capper.color, `🔥 ${capper.name} captured ${loser.name}'s piece!`);
+    });
+
+    S.on('bonusTurn', ({ player }) => {
+      this._log(player.color, `${player.name} rolled a 6 – bonus turn!`);
+      this._updateStatusBar();
+      setTimeout(() => {
+        if (player.type === 'bot') this._scheduleBotTurn();
+      }, 300);
+    });
+
+    S.on('turnChanged', ({ player }) => {
+      this.renderer.clearSelectable();
+      this._updateStatusBar();
+      this._updateScoreChips();
+      if (player.type === 'bot') this._scheduleBotTurn();
+    });
+
+    S.on('playerFinished', ({ player }) => {
+      this._log(player.color, `🏅 ${player.name} finished in position ${player.rank}!`);
+      document.getElementById(`chip-${player.id}`).classList.add('winner');
+    });
+
+    S.on('gameOver', ({ rankings, players }) => {
+      const winner = players[rankings[0]];
+      document.getElementById('winner-text').textContent = `${winner.name} Wins!`;
+      document.getElementById('winner-sub').textContent  = `Rankings: ${rankings.map(id => players[id].name).join(', ')}`;
+      document.getElementById('winner-overlay').classList.add('show');
+      this._log('system', `🏆 ${winner.name} wins the game!`);
+    });
+  }
+
+  // ---- Interaction handlers ----
+
+  _onDiceClick() {
+    const S = this.state;
+    if (S.phase !== 'ROLL') return;
+    if (S.currentPlayer.type !== 'human') return;
+
+    const diceEl = document.getElementById('dice');
+    diceEl.classList.remove('rolling');
+    void diceEl.offsetWidth; // reflow
+    diceEl.classList.add('rolling');
+    diceEl.addEventListener('animationend', () => diceEl.classList.remove('rolling'), { once: true });
+
+    S.performRoll();
+  }
+
+  _onBoardClick(e) {
+    const S = this.state;
+    if (S.phase !== 'SELECT') return;
+    if (S.currentPlayer.type !== 'human') return;
+
+    const pieceEl = e.target.closest('.piece');
+    if (!pieceEl) return;
+
+    const pid    = parseInt(pieceEl.dataset.player);
+    const piecId = parseInt(pieceEl.dataset.pieceId);
+    if (pid !== S.current) return;
+
+    const piece  = S.players[pid].pieces[piecId];
+    const legal  = S.getLegalMoves(S.currentPlayer, S.dice);
+    if (!legal.includes(piece)) return;
+
+    this.renderer.clearSelectable();
+    S.movePiece(piece);
+  }
+
+  // ---- Bot scheduling ----
+
+  _scheduleBotTurn() {
+    const delay = randomInt(600, 1100);
+    setTimeout(() => {
+      if (this.state.phase === 'ROLL' && this.state.currentPlayer.type === 'bot') {
+        const diceEl = document.getElementById('dice');
+        diceEl.classList.remove('rolling');
+        void diceEl.offsetWidth;
+        diceEl.classList.add('rolling');
+        diceEl.addEventListener('animationend', () => diceEl.classList.remove('rolling'), { once: true });
+        this.state.performRoll();
+      }
+    }, delay);
+  }
+
+  _scheduleBotMove() {
+    const delay = randomInt(400, 800);
+    setTimeout(() => {
+      const S = this.state;
+      if (S.phase !== 'SELECT') return;
+      const player = S.currentPlayer;
+      if (player.type !== 'bot') return;
+
+      const bot   = this.bots[player.id];
+      const piece = bot.chooseMove(S.dice, S);
+      if (piece) {
+        S.movePiece(piece);
+      } else {
+        S._advanceTurnHard();
+      }
+    }, delay);
+  }
+
+  // ---- UI helpers ----
+
+  _updateStatusBar() {
+    const S   = this.state;
+    const p   = S.currentPlayer;
+    const ind = document.getElementById('turn-indicator');
+    const msg = document.getElementById('status-msg');
+
+    if (S.phase === 'GAME_OVER') {
+      ind.textContent = '🏆 Game Over!';
+      ind.style.color = 'gold';
+      msg.textContent = '';
+      return;
+    }
+
+    const colorMap = { red: '#ef9a9a', green: '#a5d6a7', yellow: '#fff59d', blue: '#90caf9' };
+    ind.style.color = colorMap[p.color] || 'white';
+    ind.textContent = `${p.name}'s Turn`;
+
+    if (S.phase === 'ROLL') {
+      msg.textContent = p.type === 'bot' ? '🤖 Bot thinking…' : '🎲 Click dice to roll';
+    } else if (S.phase === 'SELECT') {
+      msg.textContent = p.type === 'bot' ? '🤖 Choosing move…' : '👆 Select a piece';
+    } else {
+      msg.textContent = '';
+    }
+
+    document.getElementById('dice').classList.toggle('disabled', S.phase !== 'ROLL' || p.type === 'bot');
+  }
+
+  _updateScoreChips() {
+    const S = this.state;
+    S.players.forEach((p, i) => {
+      const chip = document.getElementById(`chip-${i}`);
+      chip.classList.toggle('active', i === S.current && S.phase !== 'GAME_OVER');
+      const finished = p.piecesFinished;
+      chip.innerHTML = `<span class="chip-dot" style="background:var(--clr-${p.color})"></span>${p.name} ${finished}/4`;
+      if (p.finished) chip.classList.add('winner');
+    });
+  }
+
+  _setDiceFace(value) {
+    document.getElementById('dice').textContent = DICE_FACES[value - 1];
+  }
+
+  _log(color, msg) {
+    const log = document.getElementById('game-log');
+    const div = document.createElement('div');
+    div.className = `log-entry${color === 'system' ? '' : ` log-${color}`}`;
+    div.textContent = msg;
+    log.prepend(div);
+    // Limit log entries
+    while (log.children.length > 50) log.removeChild(log.lastChild);
+  }
+
+  _clearLog() {
+    document.getElementById('game-log').innerHTML = '';
+  }
+}
+
+/* =========================================================================
+   BOOT
+   ========================================================================= */
+window.addEventListener('DOMContentLoaded', () => {
+  // Reposition pieces on window resize (CSS variable recalculates)
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (window._ludoController && window._ludoController.state.players.length) {
+        window._ludoController.renderer.rerenderAll(window._ludoController.state.players);
+      }
+    }, 150);
+  });
+
+  window._ludoController = new GameController();
+});
+</script>
+</body>
+</html>
